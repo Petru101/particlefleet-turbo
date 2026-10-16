@@ -32,7 +32,8 @@ GetCoresWithVar result into a checksum) in place of the single-instance Help.prp
 - `src/ParticleFleetTurbo/` — plugin (net35). `Plugin.cs` hooks + config/hotkeys, `Profiler.cs` per-script timing
   (optional per-statement timing: a transpiler inserts `dup; call Profiler.OnStatement` after the
   `Command::statement` load in `CrplCore.ProcessCommands`; it inflates cheap commands, so off by default).
-- `tools/` — Python `.pf1` reader/writer (`pfnbt.py`), save differ, and the #1402 script patcher.
+- `tools/` — Python `.pf1` reader/writer (`pfnbt.py`) and save differ. `tools/patch1402.py` (the one-off #1402
+  map patcher) is git-ignored and kept local: it quotes the map author's scripts, which aren't ours to publish.
 - `tests/` — cache-invalidation stress script and the save injector.
 - `packaging/` — `package.sh` builds `dist/ParticleFleetTurbo-<ver>.zip`: BepInEx x86 + minimal `BepInEx.cfg`
   (entrypoint fix only; BepInEx fills in defaults, verified) + plugin + INSTALL.txt + third-party notices.
@@ -69,4 +70,5 @@ cloud-synced Documents).
 - Windows 10 (VM, software rendering) passes: release zip + shipped BepInEx.cfg load cleanly, stress self-test
   runs 1-3 identical, broken-cache run differs, 0 missing scripts/crashes/exceptions. See `tests/vm/README.md`.
 - Not yet tested: the Proton launch-option install path from INSTALL.txt (this machine uses a user.reg override).
-- No LICENSE chosen yet; publishing to GitHub and the Knuckle Cracker community is pending the user's OK.
+- License: MIT (chosen so map makers and other modders can reuse the code freely). Publishing to GitHub and the
+  Knuckle Cracker community is pending the user's OK.

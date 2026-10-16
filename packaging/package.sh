@@ -19,5 +19,6 @@ cp src/ParticleFleetTurbo/bin/Release/ParticleFleetTurbo.dll "$STAGE/BepInEx/plu
 cp packaging/BepInEx.cfg "$STAGE/BepInEx/config/"
 cp packaging/THIRD-PARTY-NOTICES.txt "$STAGE/"
 cp packaging/INSTALL.txt "$STAGE/"
+cp LICENSE "$STAGE/LICENSE.txt"
 (cd "$STAGE" && zip -qr9 "../$NAME.zip" .)
 echo "dist/$NAME.zip"

@@ -6,3 +6,5 @@ decompiled/
 __pycache__/
 dist/
 tests/vm/*.iso
+# One-off patcher for map #1402; quotes the map author's scripts, kept local only
+tools/patch1402.py

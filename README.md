@@ -58,3 +58,8 @@ packaging/package.sh   # builds dist/ParticleFleetTurbo-<version>.zip
 
 `tools/pfnbt.py` reads and writes the game's `.pf1` map/save format (4-byte length + gzip of a little-endian NBT
 variant).
+
+## License
+
+MIT, see [LICENSE](LICENSE). The release zip also bundles BepInEx (LGPL-2.1) and its dependencies; see
+`packaging/THIRD-PARTY-NOTICES.txt`.
