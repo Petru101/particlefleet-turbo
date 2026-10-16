@@ -59,9 +59,13 @@ cloud-synced Documents).
   (original backed up as `user.reg.before-bepinex`), so no Steam launch option is needed.
 - Engine changes must keep script-visible results identical (including `GetCoresWithVar` result order) so maps
   behave the same.
-- The game's own crash at 2026-10-16 08:04 (before BepInEx) was address-space exhaustion (69 MB free of 4 GB).
-  Managed heap seen at 190-485 MB across reloads; cause not investigated. `Process.PrivateMemorySize64` returns 0
-  under Wine, so only the managed heap is reported.
+- Memory (32-bit, 4 GiB): on #1402 the game settles at ~3.1 GiB mapped / ~2.2 GiB writable (measured
+  over three 20-min self-test runs, Turbo off and on alike; it plateaus, it doesn't keep growing) and a
+  map load spikes it briefly. Normal runs show ~3.2 GB VIRT. Out of address space crashed it at 08:04 on
+  2026-10-16 with neither the mod nor Ferret (the user comparing save-5/save-6, several loads in 8 min:
+  timeline from High Tide's PipeWire log, `~/Projects/high-tide-test/logs/`, JOIN/LEAVE ParticleFleet.exe).
+  A freeze at 18:36 the same day (mod + Ferret searching, core: 3.1 GiB mapped) is not explained.
+  `Process.PrivateMemorySize64` returns 0 under Wine: the profiler reports only the managed heap.
 - Loaded saves stop on the opening (fleet/Launch) panel; `GameSpace.GameUpdate` does nothing until it closes.
 - The game runs without the Steam client when `steam_appid.txt` sits next to the exe (no DRM wrapper; SteamAPI
   init failure is only logged).
@@ -74,5 +78,8 @@ cloud-synced Documents).
   BepInEx does not load; with `WINEDLLOVERRIDES="winhttp=n,b" %command%` it loads and the self-test passes.
   This machine now uses the launch option (backups: `localconfig.vdf.before-proton-test`,
   `user.reg.before-proton-test`). Steam must be stopped to edit `localconfig.vdf`, or it overwrites the change.
-- License: MIT (chosen so map makers and other modders can reuse the code freely). Publishing to GitHub and the
-  Knuckle Cracker community is pending the user's OK.
+- License: MIT (chosen so map makers and other modders can reuse the code freely).
+- Published: GitHub Petru101/particlefleet-turbo, release v0.1.0 (2026-10-16), and a Steam discussions post
+  (by the user). Knuckle Cracker forum: the user has an account; post in "Map Makers, Ship Builders, and
+  Coders" (draft in drafts/, git-ignored).
+- Long-run determinism: three 36000-tick runs of #1402 save-5 differ only in a script's MouseX/MouseY.
