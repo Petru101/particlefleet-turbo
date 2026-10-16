@@ -21,7 +21,8 @@ any frame over ~33 ms makes the whole game run in slow motion. Map #1402 showed 
 ## Verification
 F11 self-test (`SelfTest.cs`): snapshots the mission, replays 300 ticks with Turbo off/off/on (auto-presses the
 opening panel's Launch), saves each + `results.txt` timings into `<game>/BepInEx/turbo-selftest/`.
-`tools/compare_saves.py A B` diffs saves field by field. The game is deterministic (off vs off = 0 diffs).
+`tools/compare_saves.py A B` diffs saves field by field. The game is deterministic (off vs off = 0 diffs) as long as
+nothing touches it: #1402's scripts react to mouse hover/clicks, so a cursor over the window changes the result.
 #1402 save-5 result: off/on saves identical; frame 52-55 ms → 34 ms, scripts 40 → 19 ms (cap is 33.3 ms).
 Cache invalidation: `tests/make_stress_save.py` injects `tests/TurboStress.prpl` (renames networks via
 SetScriptVar, AddScriptToUnit, DestroyUnit, in-place list mutation, int/float/string queries; folds every
@@ -69,6 +70,9 @@ cloud-synced Documents).
 - Remaining cost on #1402 is the interpreter itself (~170k PRPL commands/frame: READ, PUSH, SELF, WRITE...).
 - Windows 10 (VM, software rendering) passes: release zip + shipped BepInEx.cfg load cleanly, stress self-test
   runs 1-3 identical, broken-cache run differs, 0 missing scripts/crashes/exceptions. See `tests/vm/README.md`.
-- Not yet tested: the Proton launch-option install path from INSTALL.txt (this machine uses a user.reg override).
+- Proton launch-option route (INSTALL.txt) passes: with the prefix `winhttp` override removed and no launch option
+  BepInEx does not load; with `WINEDLLOVERRIDES="winhttp=n,b" %command%` it loads and the self-test passes.
+  This machine now uses the launch option (backups: `localconfig.vdf.before-proton-test`,
+  `user.reg.before-proton-test`). Steam must be stopped to edit `localconfig.vdf`, or it overwrites the change.
 - License: MIT (chosen so map makers and other modders can reuse the code freely). Publishing to GitHub and the
   Knuckle Cracker community is pending the user's OK.
