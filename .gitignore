@@ -1,0 +1,6 @@
+bin/
+obj/
+vendor/
+decompiled/
+*.user
+__pycache__/
