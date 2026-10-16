@@ -6,6 +6,8 @@
     <Nullable>disable</Nullable>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- No debug info: it would embed the local build path in the published DLL. -->
+    <DebugType>none</DebugType>
     <GameDir Condition="'$(GameDir)' == ''">$(HOME)/.local/share/Steam/steamapps/common/Particle Fleet Emergence</GameDir>
     <Managed>$(GameDir)/ParticleFleet_Data/Managed</Managed>
     <BepInExCore>$(MSBuildThisFileDirectory)../../vendor/BepInEx/BepInEx/core</BepInExCore>
