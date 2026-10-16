@@ -30,6 +30,11 @@ namespace ParticleFleetTurbo
         private static int runIndex;
         private static GameSpace previousInstance;
         private static int startCount;
+        private static GameSpace.CATEGORY category;
+        private static int heapID;
+
+        /// <summary>Set when the test finishes; used by the auto-run mode to quit the game.</summary>
+        public static bool Finished;
 
         public static bool Busy => state != State.Idle;
 
@@ -41,18 +46,43 @@ namespace ParticleFleetTurbo
                 logger.LogWarning("Self-test needs a running (non-editor) mission and no test in progress.");
                 return;
             }
+            Prepare(logger, outputDir, tickCount);
+            game.paused = true;
+            SaveGameManager.SaveMission(SnapshotPath, includeGUID: true);
+            log.LogInfo($"Self-test: snapshot at tick {game.updateCount} -> {SnapshotPath}");
+            category = GameSpace.launchCategory;
+            heapID = GameSpace.heapID;
+            Begin(brokenCacheRun);
+        }
+
+        /// <summary>Runs the test from a save file (used by auto-run, e.g. from the main menu).</summary>
+        public static void StartFromFile(ManualLogSource logger, string outputDir, int tickCount, bool brokenCacheRun, string savePath)
+        {
+            if (Busy)
+                return;
+            Prepare(logger, outputDir, tickCount);
+            File.Copy(savePath, SnapshotPath, overwrite: true);
+            log.LogInfo($"Self-test: snapshot from {savePath}");
+            category = GameSpace.CATEGORY.NONE;
+            heapID = -1;
+            Begin(brokenCacheRun);
+        }
+
+        private static void Prepare(ManualLogSource logger, string outputDir, int tickCount)
+        {
             log = logger;
             dir = outputDir;
             ticks = tickCount;
             turboAfter = Turbo.Enabled;
             profilerAfter = Profiler.Enabled;
             Profiler.Enabled = true;
+            Finished = false;
             Directory.CreateDirectory(dir);
             File.Delete(Path.Combine(dir, "results.txt"));
-            game.paused = true;
-            SaveGameManager.SaveMission(SnapshotPath, includeGUID: true);
-            log.LogInfo($"Self-test: snapshot at tick {game.updateCount} -> {SnapshotPath}");
+        }
 
+        private static void Begin(bool brokenCacheRun)
+        {
             Runs.Clear();
             Runs.Enqueue(new Run { Turbo = false });
             Runs.Enqueue(new Run { Turbo = false });
@@ -74,6 +104,7 @@ namespace ParticleFleetTurbo
                 CoresWithVarCache.BreakInvalidation = false;
                 Profiler.Enabled = profilerAfter;
                 state = State.Idle;
+                Finished = true;
                 log.LogInfo($"Self-test finished: results in {dir}");
                 return;
             }
@@ -85,7 +116,7 @@ namespace ParticleFleetTurbo
             previousInstance = GameSpace.instance;
             state = State.Loading;
             log.LogInfo($"Self-test run {runIndex}: Turbo {(turbo ? "ON" : "OFF")}{(run.BrokenCache ? " (cache invalidation disabled)" : "")}, loading snapshot");
-            LoadingScreen.LoadGame(SnapshotPath, embeddedLoad: false, editMode: false, GameSpace.launchCategory, GameSpace.heapID);
+            LoadingScreen.LoadGame(SnapshotPath, embeddedLoad: false, editMode: false, category, heapID);
         }
 
         /// <summary>Called after every GameSpace.Update.</summary>

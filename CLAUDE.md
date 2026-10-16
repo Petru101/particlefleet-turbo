@@ -44,7 +44,9 @@ GetCoresWithVar result into a checksum) in place of the single-instance Help.prp
 ## Build / install
 `dotnet build src/ParticleFleetTurbo -c Release`, copy `bin/Release/ParticleFleetTurbo.dll` to
 `<game>/BepInEx/plugins/`. Profiler reports go to `<game>/BepInEx/LogOutput.log` every 10 s; F9 toggles overlay,
-F10 toggles Turbo, F11 runs the self-test.
+F10 toggles Turbo, F11 runs the self-test. Developer options in `[SelfTest]`: `AutoRunSave` (self-test a save
+from the main menu, then quit), `BrokenCacheRun`, `DataDir` (redirect the game's data folder away from real,
+cloud-synced Documents).
 
 ## Gotchas
 - **BepInEx entrypoint must be `Type = MonoBehaviour`** in `BepInEx/config/BepInEx.cfg` (file is CRLF).
@@ -59,9 +61,12 @@ F10 toggles Turbo, F11 runs the self-test.
   Managed heap seen at 190-485 MB across reloads; cause not investigated. `Process.PrivateMemorySize64` returns 0
   under Wine, so only the managed heap is reported.
 - Loaded saves stop on the opening (fleet/Launch) panel; `GameSpace.GameUpdate` does nothing until it closes.
+- The game runs without the Steam client when `steam_appid.txt` sits next to the exe (no DRM wrapper; SteamAPI
+  init failure is only logged).
 
 ## Next / open
 - Remaining cost on #1402 is the interpreter itself (~170k PRPL commands/frame: READ, PUSH, SELF, WRITE...).
-- Not yet tested: the Proton launch-option install path from INSTALL.txt (this machine uses a user.reg override),
-  and Windows.
+- Windows 10 (VM, software rendering) passes: release zip + shipped BepInEx.cfg load cleanly, stress self-test
+  runs 1-3 identical, broken-cache run differs, 0 missing scripts/crashes/exceptions. See `tests/vm/README.md`.
+- Not yet tested: the Proton launch-option install path from INSTALL.txt (this machine uses a user.reg override).
 - No LICENSE chosen yet; publishing to GitHub and the Knuckle Cracker community is pending the user's OK.

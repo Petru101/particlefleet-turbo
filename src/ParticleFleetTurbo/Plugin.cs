@@ -17,6 +17,9 @@ namespace ParticleFleetTurbo
         private ConfigEntry<KeyboardShortcut> selfTestKey;
         private ConfigEntry<int> selfTestTicks;
         private ConfigEntry<bool> selfTestBrokenCacheRun;
+        private ConfigEntry<string> autoRunSave;
+        private ConfigEntry<string> dataDir;
+        private bool autoRunStarted;
         private ConfigEntry<KeyboardShortcut> overlayKey;
         private ConfigEntry<float> reportSeconds;
 
@@ -32,6 +35,10 @@ namespace ParticleFleetTurbo
             selfTestTicks = Config.Bind("SelfTest", "Ticks", 300, "Game ticks per self-test run.");
             selfTestBrokenCacheRun = Config.Bind("SelfTest", "BrokenCacheRun", false,
                 "Add a run with cache invalidation disabled; its save should differ, proving the test can catch stale results.");
+            autoRunSave = Config.Bind("SelfTest", "AutoRunSave", "",
+                "Developer tool: path of a save to self-test automatically from the main menu; the game quits when done.");
+            dataDir = Config.Bind("SelfTest", "DataDir", "",
+                "Developer tool: use this folder instead of Documents/My Games/particlefleet, so test runs don't touch real (cloud-synced) data.");
             profilerEnabled = Config.Bind("Profiler", "Enabled", false, "Always measure time spent in PRPL scripts and log a report periodically (it is also on while the overlay is shown).");
             statementTiming = Config.Bind("Profiler", "StatementTiming", false, "Also time each PRPL command type (adds overhead to cheap commands).");
             overlayKey = Config.Bind("Profiler", "OverlayKey", new KeyboardShortcut(KeyCode.F9), "Toggle the on-screen profiler overlay.");
@@ -45,7 +52,15 @@ namespace ParticleFleetTurbo
             Profiler.Enabled = profilerEnabled.Value;
             Profiler.StatementTiming = statementTiming.Value;
             Turbo.Set(turboEnabled.Value);
-            new Harmony("petru.particlefleet.turbo").PatchAll(typeof(Plugin).Assembly);
+            var harmony = new Harmony("petru.particlefleet.turbo");
+            harmony.PatchAll(typeof(Plugin).Assembly);
+            if (dataDir.Value != "")
+            {
+                DataDirRedirect.Dir = dataDir.Value.TrimEnd('/', '\\') + "/";
+                harmony.Patch(AccessTools.Method(typeof(FileManager), nameof(FileManager.GetPlatformBaseDir)),
+                    prefix: new HarmonyMethod(typeof(DataDirRedirect), nameof(DataDirRedirect.Prefix)));
+                Logger.LogInfo("Game data folder redirected to " + DataDirRedirect.Dir);
+            }
             Logger.LogInfo("Particle Fleet Turbo patches applied");
         }
 
@@ -57,6 +72,18 @@ namespace ParticleFleetTurbo
                 Profiler.Enabled = profilerEnabled.Value || showOverlay;
                 Profiler.Reset();
                 overlayText = "Measuring...";
+            }
+            if (!autoRunStarted && autoRunSave.Value != "" && Time.realtimeSinceStartup > 10f && FindObjectOfType<MainMenu>() != null)
+            {
+                autoRunStarted = true;
+                Logger.LogInfo("Auto-run self-test of " + autoRunSave.Value);
+                SelfTest.StartFromFile(Logger, System.IO.Path.Combine(Paths.BepInExRootPath, "turbo-selftest"), selfTestTicks.Value,
+                    selfTestBrokenCacheRun.Value, autoRunSave.Value);
+            }
+            if (autoRunStarted && SelfTest.Finished)
+            {
+                Logger.LogInfo("Auto-run finished, quitting");
+                Application.Quit();
             }
             if (selfTestKey.Value.IsDown())
                 SelfTest.Start(Logger, System.IO.Path.Combine(Paths.BepInExRootPath, "turbo-selftest"), selfTestTicks.Value, selfTestBrokenCacheRun.Value);
@@ -124,6 +151,17 @@ namespace ParticleFleetTurbo
                     patched = true;
                 }
             }
+        }
+    }
+
+    internal static class DataDirRedirect
+    {
+        public static string Dir;
+
+        public static bool Prefix(ref string __result)
+        {
+            __result = Dir;
+            return false;
         }
     }
 }

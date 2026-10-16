@@ -5,3 +5,4 @@ decompiled/
 *.user
 __pycache__/
 dist/
+tests/vm/*.iso
