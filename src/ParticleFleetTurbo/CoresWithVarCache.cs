@@ -22,6 +22,9 @@ namespace ParticleFleetTurbo
             public int GlobalVersion;
         }
 
+        /// <summary>Test hook: when set, writes no longer invalidate the cache (the self-test must catch this).</summary>
+        public static bool BreakInvalidation;
+
         private static int globalVersion;
         // Only names that have been queried are tracked, so writes to other variables cost one failed lookup.
         private static readonly Dictionary<string, int> NameVersions = new Dictionary<string, int>();
@@ -35,7 +38,7 @@ namespace ParticleFleetTurbo
 
         private static void Touch(string name)
         {
-            if (name != null && NameVersions.TryGetValue(name, out int version))
+            if (name != null && !BreakInvalidation && NameVersions.TryGetValue(name, out int version))
                 NameVersions[name] = version + 1;
         }
 
@@ -59,11 +62,16 @@ namespace ParticleFleetTurbo
 
         public static void HeapClear(Dictionary<string, CrplCore.Data> heap)
         {
-            globalVersion++;
+            if (!BreakInvalidation)
+                globalVersion++;
             heap.Clear();
         }
 
-        public static void CoreSetChanged() => globalVersion++;
+        public static void CoreSetChanged()
+        {
+            if (!BreakInvalidation)
+                globalVersion++;
+        }
 
         private static string Key(string varName, CrplCore.Data d)
         {

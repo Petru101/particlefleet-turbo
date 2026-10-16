@@ -16,6 +16,7 @@ namespace ParticleFleetTurbo
         private ConfigEntry<bool> statementTiming;
         private ConfigEntry<KeyboardShortcut> selfTestKey;
         private ConfigEntry<int> selfTestTicks;
+        private ConfigEntry<bool> selfTestBrokenCacheRun;
         private ConfigEntry<KeyboardShortcut> overlayKey;
         private ConfigEntry<float> reportSeconds;
 
@@ -27,9 +28,11 @@ namespace ParticleFleetTurbo
         {
             turboEnabled = Config.Bind("Turbo", "Enabled", true, "Enable the engine optimizations for map scripts.");
             turboKey = Config.Bind("Turbo", "ToggleKey", new KeyboardShortcut(KeyCode.F10), "Toggle the optimizations in-game (for A/B comparison).");
-            selfTestKey = Config.Bind("SelfTest", "Key", new KeyboardShortcut(KeyCode.F11), "Replay the current mission with Turbo off/off/on and save each result for comparison.");
+            selfTestKey = Config.Bind("SelfTest", "Key", KeyboardShortcut.Empty, "Developer tool (e.g. F11): replay the current mission with Turbo off/off/on and save each result for comparison.");
             selfTestTicks = Config.Bind("SelfTest", "Ticks", 300, "Game ticks per self-test run.");
-            profilerEnabled = Config.Bind("Profiler", "Enabled", true, "Measure time spent in PRPL scripts and log a report periodically.");
+            selfTestBrokenCacheRun = Config.Bind("SelfTest", "BrokenCacheRun", false,
+                "Add a run with cache invalidation disabled; its save should differ, proving the test can catch stale results.");
+            profilerEnabled = Config.Bind("Profiler", "Enabled", false, "Always measure time spent in PRPL scripts and log a report periodically (it is also on while the overlay is shown).");
             statementTiming = Config.Bind("Profiler", "StatementTiming", false, "Also time each PRPL command type (adds overhead to cheap commands).");
             overlayKey = Config.Bind("Profiler", "OverlayKey", new KeyboardShortcut(KeyCode.F9), "Toggle the on-screen profiler overlay.");
             reportSeconds = Config.Bind("Profiler", "ReportSeconds", 10f, "Seconds between profiler reports in the BepInEx log.");
@@ -49,9 +52,14 @@ namespace ParticleFleetTurbo
         private void Update()
         {
             if (overlayKey.Value.IsDown())
+            {
                 showOverlay = !showOverlay;
+                Profiler.Enabled = profilerEnabled.Value || showOverlay;
+                Profiler.Reset();
+                overlayText = "Measuring...";
+            }
             if (selfTestKey.Value.IsDown())
-                SelfTest.Start(Logger, System.IO.Path.Combine(Paths.BepInExRootPath, "turbo-selftest"), selfTestTicks.Value);
+                SelfTest.Start(Logger, System.IO.Path.Combine(Paths.BepInExRootPath, "turbo-selftest"), selfTestTicks.Value, selfTestBrokenCacheRun.Value);
             if (turboKey.Value.IsDown() && !SelfTest.Busy)
             {
                 Turbo.Set(!Turbo.Enabled);

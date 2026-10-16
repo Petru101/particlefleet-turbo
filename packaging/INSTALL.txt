@@ -1,0 +1,33 @@
+Particle Fleet Turbo
+====================
+
+Makes custom (Exchange) maps with heavy scripts run at full speed. Particle Fleet runs one simulation step per
+frame, so when a map's scripts take too long the whole game runs in slow motion. This mod speeds up the engine
+paths those scripts use; maps play exactly the same, only faster.
+
+Install
+-------
+1. Open the game folder: in Steam, right-click Particle Fleet: Emergence > Manage > Browse local files.
+2. Extract everything from this zip into that folder (next to ParticleFleet.exe).
+   If you already use BepInEx, only copy BepInEx/plugins/ParticleFleetTurbo.dll, and make sure
+   BepInEx/config/BepInEx.cfg has  Type = MonoBehaviour  under [Preloader.Entrypoint].
+
+Linux / Steam Deck (Proton)
+---------------------------
+Use the Windows version of the game through Proton (Properties > Compatibility), and set the launch option
+(Properties > General > Launch Options):
+
+    WINEDLLOVERRIDES="winhttp=n,b" %command%
+
+The native Linux version of the game is not supported.
+
+In game
+-------
+F10  toggle the optimizations on/off (to compare)
+F9   show the profiler overlay: frame time and time spent per map script
+
+Settings are in BepInEx/config/petru.particlefleet.turbo.cfg (created after the first launch).
+
+Uninstall
+---------
+Delete BepInEx/, winhttp.dll, doorstop_config.ini and .doorstop_version from the game folder.

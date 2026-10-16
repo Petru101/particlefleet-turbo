@@ -1,0 +1,10 @@
+This package bundles BepInEx 5.4.23.5 (win_x86) unmodified, which includes:
+
+- BepInEx            LGPL-2.1   https://github.com/BepInEx/BepInEx
+- UnityDoorstop      LGPL-2.1   https://github.com/NeighTools/UnityDoorstop  (winhttp.dll)
+- HarmonyX           MIT        https://github.com/BepInEx/HarmonyX         (0Harmony.dll)
+- MonoMod            MIT        https://github.com/MonoMod/MonoMod
+- Mono.Cecil         MIT        https://github.com/jbevain/cecil
+
+Source code for these components is available at the links above. The BepInEx binaries can be replaced with
+any compatible BepInEx 5 x86 build.

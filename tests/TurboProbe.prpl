@@ -1,0 +1,6 @@
+# --TurboProbe-- Added to units at runtime by TurboStress.prpl.
+$TS_Probe:1
+
+GetGameTimeFrames 3 mod eq0 if
+	<-TS_Probe not ->TS_Probe
+endif

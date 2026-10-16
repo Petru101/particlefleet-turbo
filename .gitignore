@@ -4,3 +4,4 @@ vendor/
 decompiled/
 *.user
 __pycache__/
+dist/

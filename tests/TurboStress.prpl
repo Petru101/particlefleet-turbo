@@ -1,0 +1,65 @@
+# --TurboStress-- Exercises GetCoresWithVar cache invalidation for Particle Fleet Turbo.
+# Every tick it mutates variables, networks and the set of script cores on a fixed schedule, queries
+# GetCoresWithVar, and folds every result (UIDs, in order) into Checksum / History. A stale cached result
+# makes the Turbo-on save differ from the Turbo-off save.
+
+<-Init not if
+	1 ->Init
+	0 ->Step
+	0 ->Checksum
+	CreateList ->History
+	CreateList ->Targets
+	"IsController" 0 GetCoresWithVar 0 do
+		->U
+		<-Targets GetListCount 8 lt if <-Targets <-U AppendToList endif
+	loop
+	CreateList ->TS_Mixed
+	<-TS_Mixed 5 AppendToList
+endif
+
+<-Step 1 add ->Step
+
+# Own int / float / string vars that change every tick.
+<-Step 4 mod ->TS_Val
+"TS_Val" 2 @Record
+"TS_Val" 0 @Record
+<-Step 2 mod if 0.5 else 0.25 endif ->TS_Float
+"TS_Float" 0.5 @Record
+"S" <-Step 3 mod concat ->TS_Str
+"TS_Str" "S1" @Record
+
+# Rename networks on other units (SetScriptVar into their ControlInterface core).
+<-Step 5 mod eq0 if
+	<-Targets <-Step 5 div <-Targets GetListCount mod GetListElement "ControlInterface.prpl" "NetName" "TS_" <-Step 3 mod concat SetScriptVar
+endif
+"NetName" "TS_0" @Record
+"NetName" "TS_1" @Record
+"NetName" "01" @Record
+
+# Add new script cores at runtime; probes flip their own TS_Probe value.
+<-Step 7 mod eq0 if
+	<-Targets <-Step 7 div <-Targets GetListCount mod GetListElement "TurboProbe.prpl" AddScriptToUnit
+endif
+"TS_Probe" 1 @Record
+"TS_Probe" 0 @Record
+
+# A list-valued variable mutated in place (no variable write) under a queried name.
+<-TS_Mixed 0 <-Step 3 mod 4 add SetListElement
+"TS_Mixed" 5 @Record
+
+# Destroy units that hold queried variables.
+<-Step 60 eq <-Step 140 eq or if
+	<-Targets 0 GetListElement 1 DestroyUnit
+	<-Targets 0 RemoveListElement
+endif
+"IsController" 0 @Record
+
+<-History <-Checksum AppendToList
+
+:Record # [ name value - ]
+	->RV ->RN
+	<-RN <-RV GetCoresWithVar ->RCount
+	<-RCount 0 do
+		<-Checksum 31 mul add 1000003 mod ->Checksum
+	loop
+	<-Checksum 7 mul <-RCount add 1000003 mod ->Checksum

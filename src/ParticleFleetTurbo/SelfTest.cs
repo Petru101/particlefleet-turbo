@@ -17,16 +17,23 @@ namespace ParticleFleetTurbo
         private static string dir;
         private static int ticks;
         private static bool turboAfter;
+        private static bool profilerAfter;
 
         private static State state = State.Idle;
-        private static readonly Queue<bool> Runs = new Queue<bool>();
+        private struct Run
+        {
+            public bool Turbo;
+            public bool BrokenCache;
+        }
+
+        private static readonly Queue<Run> Runs = new Queue<Run>();
         private static int runIndex;
         private static GameSpace previousInstance;
         private static int startCount;
 
         public static bool Busy => state != State.Idle;
 
-        public static void Start(ManualLogSource logger, string outputDir, int tickCount)
+        public static void Start(ManualLogSource logger, string outputDir, int tickCount, bool brokenCacheRun)
         {
             GameSpace game = GameSpace.instance;
             if (Busy || game == null || GameSpace.editMode)
@@ -38,6 +45,8 @@ namespace ParticleFleetTurbo
             dir = outputDir;
             ticks = tickCount;
             turboAfter = Turbo.Enabled;
+            profilerAfter = Profiler.Enabled;
+            Profiler.Enabled = true;
             Directory.CreateDirectory(dir);
             File.Delete(Path.Combine(dir, "results.txt"));
             game.paused = true;
@@ -45,9 +54,12 @@ namespace ParticleFleetTurbo
             log.LogInfo($"Self-test: snapshot at tick {game.updateCount} -> {SnapshotPath}");
 
             Runs.Clear();
-            Runs.Enqueue(false);
-            Runs.Enqueue(false);
-            Runs.Enqueue(true);
+            Runs.Enqueue(new Run { Turbo = false });
+            Runs.Enqueue(new Run { Turbo = false });
+            Runs.Enqueue(new Run { Turbo = true });
+            // Sanity check of the test itself: with cache invalidation disabled the saves should differ.
+            if (brokenCacheRun)
+                Runs.Enqueue(new Run { Turbo = true, BrokenCache = true });
             runIndex = 0;
             NextRun();
         }
@@ -59,16 +71,20 @@ namespace ParticleFleetTurbo
             if (Runs.Count == 0)
             {
                 Turbo.Set(turboAfter);
+                CoresWithVarCache.BreakInvalidation = false;
+                Profiler.Enabled = profilerAfter;
                 state = State.Idle;
                 log.LogInfo($"Self-test finished: results in {dir}");
                 return;
             }
-            bool turbo = Runs.Dequeue();
+            Run run = Runs.Dequeue();
+            bool turbo = run.Turbo;
             runIndex++;
             Turbo.Set(turbo);
+            CoresWithVarCache.BreakInvalidation = run.BrokenCache;
             previousInstance = GameSpace.instance;
             state = State.Loading;
-            log.LogInfo($"Self-test run {runIndex}: Turbo {(turbo ? "ON" : "OFF")}, loading snapshot");
+            log.LogInfo($"Self-test run {runIndex}: Turbo {(turbo ? "ON" : "OFF")}{(run.BrokenCache ? " (cache invalidation disabled)" : "")}, loading snapshot");
             LoadingScreen.LoadGame(SnapshotPath, embeddedLoad: false, editMode: false, GameSpace.launchCategory, GameSpace.heapID);
         }
 
@@ -96,9 +112,10 @@ namespace ParticleFleetTurbo
                     if (game.updateCount - startCount < ticks)
                         return;
                     game.paused = true;
-                    string path = Path.Combine(dir, $"run{runIndex}-turbo-{(Turbo.Enabled ? "on" : "off")}.pf1");
+                    string label = Turbo.Enabled ? (CoresWithVarCache.BreakInvalidation ? "on-brokencache" : "on") : "off";
+                    string path = Path.Combine(dir, $"run{runIndex}-turbo-{label}.pf1");
                     SaveGameManager.SaveMission(path, includeGUID: true);
-                    string timing = $"run {runIndex} Turbo {(Turbo.Enabled ? "ON " : "OFF")}: real frame {Profiler.FrameMs:F1} ms, " +
+                    string timing = $"run {runIndex} Turbo {label}: real frame {Profiler.FrameMs:F1} ms, " +
                                     $"GameSpace.Update {Profiler.UpdateMs:F1} ms, scripts {Profiler.ScriptMs:F1} ms";
                     File.AppendAllText(Path.Combine(dir, "results.txt"), timing + "\n");
                     log.LogInfo($"Self-test {timing}; ran {game.updateCount - startCount} ticks -> {path}");
