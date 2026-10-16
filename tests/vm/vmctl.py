@@ -1,11 +1,13 @@
 """Drive a GNOME Boxes VM through libvirt: type text, press keys, take screenshots.
-Usage: vmctl.py type TEXT | key KEY [KEY...] | shot OUT.png"""
+Usage: vmctl.py type TEXT | key KEY [KEY...] | shot OUT.png   (VM name from $PF_VM_DOMAIN)"""
+import os
 import subprocess
 import sys
 
-DOMAIN = 'win10-glorious'
+DOMAIN = os.environ.get('PF_VM_DOMAIN', 'win10')
 VIRSH = ['host-spawn', 'flatpak', 'run', '--command=virsh', 'org.gnome.Boxes', '-c', 'qemu:///session']
-SHOT = '/home/Petru/.var/app/org.gnome.Boxes/cache/vm.ppm'
+# Written by virsh inside the Boxes sandbox, so it must be a path that sandbox can write.
+SHOT = os.path.expanduser('~/.var/app/org.gnome.Boxes/cache/vm.ppm')
 
 PLAIN = {' ': 'KEY_SPACE', '\\': 'KEY_BACKSLASH', '.': 'KEY_DOT', '-': 'KEY_MINUS', '/': 'KEY_SLASH',
          ';': 'KEY_SEMICOLON', "'": 'KEY_APOSTROPHE', ',': 'KEY_COMMA', '=': 'KEY_EQUAL', '\n': 'KEY_ENTER'}
