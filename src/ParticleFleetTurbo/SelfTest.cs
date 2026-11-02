@@ -81,12 +81,14 @@ namespace ParticleFleetTurbo
             File.Delete(Path.Combine(dir, "results.txt"));
         }
 
+        /// <summary>Turbo state of each run, e.g. "off,off,on".</summary>
+        public static string Order = "off,off,on";
+
         private static void Begin(bool brokenCacheRun)
         {
             Runs.Clear();
-            Runs.Enqueue(new Run { Turbo = false });
-            Runs.Enqueue(new Run { Turbo = false });
-            Runs.Enqueue(new Run { Turbo = true });
+            foreach (string run in Order.Split(','))
+                Runs.Enqueue(new Run { Turbo = run.Trim() == "on" });
             // Sanity check of the test itself: with cache invalidation disabled the saves should differ.
             if (brokenCacheRun)
                 Runs.Enqueue(new Run { Turbo = true, BrokenCache = true });
@@ -137,6 +139,8 @@ namespace ParticleFleetTurbo
                     Profiler.Reset();
                     game.SPEED_MULTIPLE = 1f;
                     game.paused = false;
+                    // The engine's UnityEngine.Random is seeded from the clock at startup and some units use it.
+                    UnityEngine.Random.seed = 1;
                     state = State.Running;
                     break;
                 case State.Running:
@@ -147,8 +151,9 @@ namespace ParticleFleetTurbo
                     string path = Path.Combine(dir, $"run{runIndex}-turbo-{label}.pf1");
                     SaveGameManager.SaveMission(path, includeGUID: true);
                     string timing = $"run {runIndex} Turbo {label}: real frame {Profiler.FrameMs:F1} ms, " +
-                                    $"GameSpace.Update {Profiler.UpdateMs:F1} ms, scripts {Profiler.ScriptMs:F1} ms";
-                    File.AppendAllText(Path.Combine(dir, "results.txt"), timing + "\n");
+                                    $"GameSpace.Update {Profiler.UpdateMs:F1} ms, scripts {Profiler.ScriptMs:F1} ms" +
+                                    (SpaceModuleTargetPatch.Verify ? $", target search verified {SpaceModuleTargetPatch.Calls} calls, {SpaceModuleTargetPatch.Mismatches} mismatches" : "");
+                    File.AppendAllText(Path.Combine(dir, "results.txt"), timing + "\n" + (Sections.Enabled ? Sections.Report(Profiler.Frames, 40) : ""));
                     log.LogInfo($"Self-test {timing}; ran {game.updateCount - startCount} ticks -> {path}");
                     NextRun();
                     break;

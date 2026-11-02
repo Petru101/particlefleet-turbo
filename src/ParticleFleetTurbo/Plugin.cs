@@ -14,9 +14,12 @@ namespace ParticleFleetTurbo
         private ConfigEntry<KeyboardShortcut> turboKey;
         private ConfigEntry<bool> profilerEnabled;
         private ConfigEntry<bool> statementTiming;
+        private ConfigEntry<bool> sectionTiming;
         private ConfigEntry<KeyboardShortcut> selfTestKey;
         private ConfigEntry<int> selfTestTicks;
         private ConfigEntry<bool> selfTestBrokenCacheRun;
+        private ConfigEntry<string> selfTestOrder;
+        private ConfigEntry<bool> verifyFastPaths;
         private ConfigEntry<string> autoRunSave;
         private ConfigEntry<string> dataDir;
         private bool autoRunStarted;
@@ -35,12 +38,15 @@ namespace ParticleFleetTurbo
             selfTestTicks = Config.Bind("SelfTest", "Ticks", 300, "Game ticks per self-test run.");
             selfTestBrokenCacheRun = Config.Bind("SelfTest", "BrokenCacheRun", false,
                 "Add a run with cache invalidation disabled; its save should differ, proving the test can catch stale results.");
+            selfTestOrder = Config.Bind("SelfTest", "Order", "off,off,on", "Turbo state of each self-test run, in order (off vs off shows the game's own run-to-run variation).");
+            verifyFastPaths = Config.Bind("SelfTest", "VerifyFastPaths", false, "Developer tool: also run the engine's own code next to each fast path and count calls where the results differ (slow).");
             autoRunSave = Config.Bind("SelfTest", "AutoRunSave", "",
                 "Developer tool: path of a save to self-test automatically from the main menu; the game quits when done.");
             dataDir = Config.Bind("SelfTest", "DataDir", "",
                 "Developer tool: use this folder instead of Documents/My Games/particlefleet, so test runs don't touch real (cloud-synced) data.");
             profilerEnabled = Config.Bind("Profiler", "Enabled", false, "Always measure time spent in PRPL scripts and log a report periodically (it is also on while the overlay is shown).");
             statementTiming = Config.Bind("Profiler", "StatementTiming", false, "Also time each PRPL command type (adds overhead to cheap commands).");
+            sectionTiming = Config.Bind("Profiler", "SectionTiming", false, "Also split the engine's own per-frame time into sections (read at startup).");
             overlayKey = Config.Bind("Profiler", "OverlayKey", new KeyboardShortcut(KeyCode.F9), "Toggle the on-screen profiler overlay.");
             reportSeconds = Config.Bind("Profiler", "ReportSeconds", 10f, "Seconds between profiler reports in the BepInEx log.");
         }
@@ -52,8 +58,18 @@ namespace ParticleFleetTurbo
             Profiler.Enabled = profilerEnabled.Value;
             Profiler.StatementTiming = statementTiming.Value;
             Turbo.Set(turboEnabled.Value);
+            SelfTest.Order = selfTestOrder.Value;
+            SpaceModuleTargetPatch.Verify = verifyFastPaths.Value;
             var harmony = new Harmony("petru.particlefleet.turbo");
             harmony.PatchAll(typeof(Plugin).Assembly);
+            if (sectionTiming.Value)
+            {
+                Sections.Enabled = true;
+                Sections.Instrument(harmony, AccessTools.Method(typeof(GameSpace), "GameUpdate"));
+                foreach (var m in new[] { AccessTools.Method(typeof(SpaceModule), "GameUpdate"), AccessTools.Method(typeof(Module), "GameUpdate"),
+                    AccessTools.Method(typeof(CommandModule), "GameUpdate"), AccessTools.Method(typeof(Land), "UpdateSubmeshes") })
+                    Sections.Instrument(harmony, m);
+            }
             if (dataDir.Value != "")
             {
                 DataDirRedirect.Dir = dataDir.Value.TrimEnd('/', '\\') + "/";
@@ -125,9 +141,15 @@ namespace ParticleFleetTurbo
     [HarmonyPatch(typeof(GameSpace), "Update")]
     internal static class GameSpaceUpdatePatch
     {
-        private static void Prefix() => Profiler.UpdateBegin();
+        private static void Prefix()
+        {
+            Profiler.UpdateBegin();
+            Sections.Begin();
+        }
+
         private static void Postfix(GameSpace __instance)
         {
+            Sections.End();
             Profiler.UpdateEnd(Time.unscaledDeltaTime);
             SelfTest.AfterGameUpdate(__instance);
         }

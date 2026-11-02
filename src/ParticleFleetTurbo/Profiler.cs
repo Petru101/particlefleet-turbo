@@ -112,6 +112,8 @@ namespace ParticleFleetTurbo
             foreach (var kv in Scripts.OrderByDescending(kv => kv.Value.Ticks).Take(topScripts))
                 sb.AppendFormat("  {0,8:F3}  {1,6:F0}  {2}\n", kv.Value.Ticks * MsPerTick / f, kv.Value.Calls / f, kv.Key);
 
+            if (Sections.Enabled)
+                sb.Append(Sections.Report(frames, 30));
             if (!StatementTiming)
                 return sb.ToString();
             sb.Append("Statements (ms/frame, calls/frame, us/call):\n");
@@ -126,6 +128,7 @@ namespace ParticleFleetTurbo
             Scripts.Clear();
             Array.Clear(StatementTicks, 0, StatementTicks.Length);
             Array.Clear(StatementCalls, 0, StatementCalls.Length);
+            Sections.Reset();
             updateTicks = crplTicks = 0;
             frameSeconds = 0;
             frames = 0;

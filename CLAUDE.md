@@ -1,13 +1,15 @@
 # Particle Fleet Turbo
 
 BepInEx 5 plugin for Particle Fleet: Emergence (Steam 422900, Unity 5.3.6p6, 32-bit Mono, run via Proton)
-that profiles and speeds up custom-map PRPL scripts in the engine instead of in each map.
+that profiles and speeds up custom-map PRPL scripts and slow engine paths, without changing how maps play.
 
 ## Why
 The simulation does one tick per rendered frame at a 30 fps target (`GameSpace.Update` → `GameUpdate`), so
 any frame over ~33 ms makes the whole game run in slow motion. Map #1402 showed the cause: per-frame
 `GetCoresWithVar` (engine scans every active `CrplCore` and allocates a HashSet per call) and redundant
 `SetImage*` calls across ~170 script units. Patching the map's scripts made it ~2x faster.
+Map #1494 (no scripts, 16 player ships with 230 particle-beam "space" modules, spreading mire) was engine-bound:
+`SpaceModule.FindNearestEnemy` (every module scans ~2800 cells every tick) and full land-mesh re-uploads.
 
 ## Optimizations (all behind `Turbo.Enabled`, toggled live with F10)
 - `CoresWithVarCache.cs` — caches `GetCrplCoreHoldersWithVar` per (var name, value). Invalidated per name by
@@ -17,6 +19,9 @@ any frame over ~33 ms makes the whole game run in slow motion. Map #1402 showed 
 - `ImageFastPaths.cs` — `SetImage` no-op when the slot already holds that image; regex-free `IsAlphaNum`
   (same semantics incl. .NET `$` before final `\n`); memoized ToUpper in `GetImageData`; skip identical
   `SetColor` / localPosition / localScale / eulerAngles writes.
+- `EngineFastPaths.cs` — `SpaceModule.FindNearestEnemy` as a tight row scan that breaks ties by the engine's ring
+  scan order (first cell with the lowest key; `Rank`), calling the engine's own pure cell checks; land submeshes
+  upload only the vertex arrays a `SetQuadNEW`/`UpdateNormalTexture` call actually changed (mire = colors only).
 
 ## Verification
 F11 self-test (`SelfTest.cs`): snapshots the mission, replays 300 ticks with Turbo off/off/on (auto-presses the
@@ -28,11 +33,20 @@ Cache invalidation: `tests/make_stress_save.py` injects `tests/TurboStress.prpl`
 SetScriptVar, AddScriptToUnit, DestroyUnit, in-place list mutation, int/float/string queries; folds every
 GetCoresWithVar result into a checksum) in place of the single-instance Help.prpl. Over 300 ticks: off = on
 (0 diffs); with `SelfTest.BrokenCacheRun` (invalidation disabled) 330 diffs, so the test is sensitive.
+UnityEngine.Random is seeded from the clock and some units use it (#1494 differed even off vs off), so each run
+reseeds it (`Random.seed = 1`). `[SelfTest] VerifyFastPaths` runs the engine's original target search (reverse
+patch) next to the fast one and counts mismatches. #1494 save-1, 600 ticks: off = off = on (0 diffs), 136,736
+searches 0 mismatches; GameSpace.Update 45 → 30 ms (search 14.7 → 5.4, land mesh 9.5 → 3.6), headless frame 52 → 37.
+Later runs in one session are slower (+5-6 ms by run 3, heap/GC growth), so compare runs in the same position
+(`[SelfTest] Order`, e.g. `on,off,on`).
 
 ## Layout
 - `src/ParticleFleetTurbo/` — plugin (net35). `Plugin.cs` hooks + config/hotkeys, `Profiler.cs` per-script timing
   (optional per-statement timing: a transpiler inserts `dup; call Profiler.OnStatement` after the
   `Command::statement` load in `CrplCore.ProcessCommands`; it inflates cheap commands, so off by default).
+  `Sections.cs` (`[Profiler] SectionTiming`, read at startup) splits engine time by call site: a transpiler marks
+  every game/Unity call in the instrumented methods (list in `Plugin.Start`); parameterless virtual calls are split
+  by receiver type. That is how #1494's hot spots were found.
 - `tools/` — Python `.pf1` reader/writer (`pfnbt.py`) and save differ. `tools/patch1402.py` (the one-off #1402
   map patcher) is git-ignored and kept local: it quotes the map author's scripts, which aren't ours to publish.
 - `tests/` — cache-invalidation stress script and the save injector.
@@ -44,6 +58,8 @@ GetCoresWithVar result into a checksum) in place of the single-instance Help.prp
 - `vendor/` (git-ignored) — BepInEx_win_x86_5.4.23.5 zip/extract; the build references its core DLLs.
 
 ## Build / install
+The game is at `/run/media/Petru/Games/SteamLibrary/steamapps/common/Particle Fleet Emergence` (prefix in
+`../../compatdata/422900`); pass it as `-p:GameDir=...` (the csproj default path doesn't exist here).
 `dotnet build src/ParticleFleetTurbo -c Release`, copy `bin/Release/ParticleFleetTurbo.dll` to
 `<game>/BepInEx/plugins/`. Profiler reports go to `<game>/BepInEx/LogOutput.log` every 10 s; F9 toggles overlay,
 F10 toggles Turbo, F11 runs the self-test. Developer options in `[SelfTest]`: `AutoRunSave` (self-test a save
@@ -64,8 +80,14 @@ cloud-synced Documents).
   map load spikes it briefly. Normal runs show ~3.2 GB VIRT. Out of address space crashed it at 08:04 on
   2026-10-16 with neither the mod nor Ferret (the user comparing save-5/save-6, several loads in 8 min:
   timeline from High Tide's PipeWire log, `~/Projects/high-tide-test/logs/`, JOIN/LEAVE ParticleFleet.exe).
-  A freeze at 18:36 the same day (mod + Ferret searching, core: 3.1 GiB mapped) is not explained.
+  Freezes at 18:36 that day and at 02:00 on 10-17 were a Steam client overlay bug (alt-tab wedges
+  gameoverlayui; ValveSoftware/steam-for-linux#13682), not the mod. Workaround: overlay off for the game.
   `Process.PrivateMemorySize64` returns 0 under Wine: the profiler reports only the managed heap.
+- Hidden test copy: `/run/media/Petru/Games/pf-test/` holds reflinked copies of the game (`game/`, with
+  `steam_appid.txt`), its prefix (`prefix/`) and data (`data/`, used via `DataDir`). `bin/start.sh` (run on the host
+  with host-spawn) starts it in a headless gamescope (Ferret's `test-game/hidden.sh`, unit `hidden-pftest`) with
+  Proton Experimental directly; with `AutoRunSave` set it self-tests and quits (~1 min per 600-tick run).
+  Replace a DLL the running game has loaded by writing a new file and `mv` over it, never `cp` onto it.
 - Loaded saves stop on the opening (fleet/Launch) panel; `GameSpace.GameUpdate` does nothing until it closes.
 - The game runs without the Steam client when `steam_appid.txt` sits next to the exe (no DRM wrapper; SteamAPI
   init failure is only logged).
