@@ -37,6 +37,17 @@ namespace ParticleFleetTurbo
         private static float frameSeconds;
         private static int frames;
 
+        // Frames over LongFrameMs: the stall happened during the previous frame, so note that frame's GameSpace.Update
+        // time and whether a garbage collection ran since then.
+        public const float LongFrameMs = 100f;
+        private static readonly List<string> LongFrames = new List<string>();
+        private static float longFrameSeconds;
+        private static double lastUpdateMs;
+        private static int lastGcCount;
+
+        /// <summary>Developer check: per-frame log (frame ms, previous frame's update ms, GCs since), written by the self-test.</summary>
+        public static StringBuilder FrameLog;
+
         public static int Frames => frames;
         public static double FrameMs => frames == 0 ? 0 : frameSeconds * 1000 / frames;
         public static double UpdateMs => frames == 0 ? 0 : updateTicks * MsPerTick / frames;
@@ -93,9 +104,22 @@ namespace ParticleFleetTurbo
         {
             if (!Enabled)
                 return;
-            updateTicks += Stopwatch.GetTimestamp() - updateStart;
+            long ticks = Stopwatch.GetTimestamp() - updateStart;
+            updateTicks += ticks;
             frameSeconds += unscaledDeltaTime;
             frames++;
+            int gc = GC.CollectionCount(0);
+            if (unscaledDeltaTime * 1000 > LongFrameMs)
+            {
+                longFrameSeconds += unscaledDeltaTime;
+                if (LongFrames.Count < 20)
+                    LongFrames.Add(string.Format("  {0,6:F0} ms  update {1,6:F1} ms  GCs {2}  heap {3} MB", unscaledDeltaTime * 1000, lastUpdateMs,
+                        gc - lastGcCount, GC.GetTotalMemory(false) >> 20));
+            }
+            if (FrameLog != null)
+                FrameLog.AppendFormat("{0:F2}\t{1:F2}\t{2}\n", unscaledDeltaTime * 1000, lastUpdateMs, gc - lastGcCount);
+            lastGcCount = gc;
+            lastUpdateMs = ticks * MsPerTick;
         }
 
         public static string Report(int topScripts, int topStatements)
@@ -106,7 +130,13 @@ namespace ParticleFleetTurbo
             var sb = new StringBuilder();
             sb.AppendFormat("{0} frames | real frame {1:F1} ms ({2:F1} fps, target 30) | GameSpace.Update {3:F2} ms | scripts {4:F2} ms\n",
                 frames, frameSeconds * 1000 / f, f / frameSeconds, updateTicks * MsPerTick / f, crplTicks * MsPerTick / f);
-            sb.AppendFormat("Managed heap {0} MB\n", GC.GetTotalMemory(false) >> 20);
+            sb.AppendFormat("Managed heap {0} MB, {1} GCs so far\n", GC.GetTotalMemory(false) >> 20, GC.CollectionCount(0));
+            if (LongFrames.Count > 0)
+            {
+                sb.AppendFormat("Long frames (> {0:F0} ms): {1:F0} ms in total\n", LongFrameMs, longFrameSeconds * 1000);
+                foreach (string line in LongFrames)
+                    sb.Append(line).Append('\n');
+            }
 
             sb.Append("Scripts (ms/frame, runs/frame):\n");
             foreach (var kv in Scripts.OrderByDescending(kv => kv.Value.Ticks).Take(topScripts))
@@ -130,8 +160,9 @@ namespace ParticleFleetTurbo
             Array.Clear(StatementCalls, 0, StatementCalls.Length);
             Sections.Reset();
             updateTicks = crplTicks = 0;
-            frameSeconds = 0;
+            frameSeconds = longFrameSeconds = 0;
             frames = 0;
+            LongFrames.Clear();
         }
     }
 }

@@ -10,6 +10,8 @@ any frame over ~33 ms makes the whole game run in slow motion. Map #1402 showed 
 `SetImage*` calls across ~170 script units. Patching the map's scripts made it ~2x faster.
 Map #1494 (no scripts, 16 player ships with 230 particle-beam "space" modules, spreading mire) was engine-bound:
 `SpaceModule.FindNearestEnemy` (every module scans ~2800 cells every tick) and full land-mesh re-uploads.
+Map #1163 (~180 land omnis with lathes, spreading mire) felt like "a second lost every 10 s": not freezes but most
+frames 34-50 ms. Cost was the omnis' per-tick target searches, which almost always find nothing.
 
 ## Optimizations (all behind `Turbo.Enabled`, toggled live with F10)
 - `CoresWithVarCache.cs` — caches `GetCrplCoreHoldersWithVar` per (var name, value). Invalidated per name by
@@ -21,7 +23,11 @@ Map #1494 (no scripts, 16 player ships with 230 particle-beam "space" modules, s
   `SetColor` / localPosition / localScale / eulerAngles writes.
 - `EngineFastPaths.cs` — `SpaceModule.FindNearestEnemy` as a tight row scan that breaks ties by the engine's ring
   scan order (first cell with the lowest key; `Rank`), calling the engine's own pure cell checks; land submeshes
-  upload only the vertex arrays a `SetQuadNEW`/`UpdateNormalTexture` call actually changed (mire = colors only).
+  upload only the vertex arrays a `SetQuadNEW`/`UpdateNormalTexture` call actually changed (mire = colors only);
+  plasma submeshes likewise. `Struc.GetNearestStruc` / `Land.GetNearestCoveredLand`: same 3x3-block walk, but the
+  empty-block test is inline and only occupied blocks call the engine's per-block method (reverse patch).
+  `LatheWeapon.FireAtLandUnit`: a tight pre-scan of the pure part of its condition skips the engine's scan when
+  no cell can pass (it would return false with no side effects).
 
 ## Verification
 F11 self-test (`SelfTest.cs`): snapshots the mission, replays 300 ticks with Turbo off/off/on (auto-presses the
@@ -37,6 +43,9 @@ UnityEngine.Random is seeded from the clock and some units use it (#1494 differe
 reseeds it (`Random.seed = 1`). `[SelfTest] VerifyFastPaths` runs the engine's original target search (reverse
 patch) next to the fast one and counts mismatches. #1494 save-1, 600 ticks: off = off = on (0 diffs), 136,736
 searches 0 mismatches; GameSpace.Update 45 → 30 ms (search 14.7 → 5.4, land mesh 9.5 → 3.6), headless frame 52 → 37.
+#1163 save-1 (900 ticks, Turbo on in run 1): 413k block searches and 117k lathe skips 0 mismatches, off = on saves;
+GameSpace.Update 29.8 → ~26 ms, 30 s of game took 33.2 s → 31.2-31.8 s headless (off: 37-42 s). Left: map scripts
+~4.4 ms, land colour uploads 3.6 ms, many sub-1 ms costs (`FireAtUnit`, `PackSource.HookUp`...).
 Later runs in one session are slower (+5-6 ms by run 3, heap/GC growth), so compare runs in the same position
 (`[SelfTest] Order`, e.g. `on,off,on`).
 
@@ -46,7 +55,9 @@ Later runs in one session are slower (+5-6 ms by run 3, heap/GC growth), so comp
   `Command::statement` load in `CrplCore.ProcessCommands`; it inflates cheap commands, so off by default).
   `Sections.cs` (`[Profiler] SectionTiming`, read at startup) splits engine time by call site: a transpiler marks
   every game/Unity call in the instrumented methods (list in `Plugin.Start`); parameterless virtual calls are split
-  by receiver type. That is how #1494's hot spots were found.
+  by receiver type. That is how #1494's and #1163's hot spots were found. Profiler reports list frames over 100 ms
+  (with the previous frame's update time and GC count), and each self-test run writes `run<N>-frames.tsv`
+  (frame ms, update ms, GCs) and times a forced GC (~45 ms at 250 MB, so GC pauses aren't the problem).
 - `tools/` — Python `.pf1` reader/writer (`pfnbt.py`) and save differ. `tools/patch1402.py` (the one-off #1402
   map patcher) is git-ignored and kept local: it quotes the map author's scripts, which aren't ours to publish.
 - `tests/` — cache-invalidation stress script and the save injector.
@@ -101,7 +112,8 @@ cloud-synced Documents).
   This machine now uses the launch option (backups: `localconfig.vdf.before-proton-test`,
   `user.reg.before-proton-test`). Steam must be stopped to edit `localconfig.vdf`, or it overwrites the change.
 - License: MIT (chosen so map makers and other modders can reuse the code freely).
-- Published: GitHub Petru101/particlefleet-turbo, releases v0.1.0 (scripts) and v0.2.0 (engine fast paths; its zip
+- Published: GitHub Petru101/particlefleet-turbo, releases v0.1.0 (scripts), v0.2.0 (engine fast paths) and v0.3.0
+  (omni searches, plasma uploads; each release zip
   was tested on a fresh hidden game copy: loads, 0 missing scripts, self-test off = on), and a Steam discussions post
   (by the user). Knuckle Cracker forum: the user has an account; post in "Map Makers, Ship Builders, and
   Coders" (draft in drafts/, git-ignored).

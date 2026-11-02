@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using BepInEx.Logging;
@@ -137,6 +138,7 @@ namespace ParticleFleetTurbo
                     }
                     startCount = game.updateCount;
                     Profiler.Reset();
+                    Profiler.FrameLog = new System.Text.StringBuilder();
                     game.SPEED_MULTIPLE = 1f;
                     game.paused = false;
                     // The engine's UnityEngine.Random is seeded from the clock at startup and some units use it.
@@ -152,8 +154,15 @@ namespace ParticleFleetTurbo
                     SaveGameManager.SaveMission(path, includeGUID: true);
                     string timing = $"run {runIndex} Turbo {label}: real frame {Profiler.FrameMs:F1} ms, " +
                                     $"GameSpace.Update {Profiler.UpdateMs:F1} ms, scripts {Profiler.ScriptMs:F1} ms" +
-                                    (SpaceModuleTargetPatch.Verify ? $", target search verified {SpaceModuleTargetPatch.Calls} calls, {SpaceModuleTargetPatch.Mismatches} mismatches" : "");
-                    File.AppendAllText(Path.Combine(dir, "results.txt"), timing + "\n" + (Sections.Enabled ? Sections.Report(Profiler.Frames, 40) : ""));
+                                    (SpaceModuleTargetPatch.Verify ? $", target search verified {SpaceModuleTargetPatch.Calls} calls, {SpaceModuleTargetPatch.Mismatches} mismatches" +
+                                     $", block searches {BlockSearchPatches.Calls} calls, {BlockSearchPatches.Mismatches} mismatches" +
+                                     $", lathe land unit skips {LatheLandUnitPatch.Skipped}, {LatheLandUnitPatch.Mismatches} mismatches" : "");
+                    File.WriteAllText(Path.Combine(dir, $"run{runIndex}-frames.tsv"), Profiler.FrameLog.ToString());
+                    Profiler.FrameLog = null;
+                    var gcWatch = System.Diagnostics.Stopwatch.StartNew();
+                    GC.Collect();
+                    timing += $", forced GC {gcWatch.Elapsed.TotalMilliseconds:F0} ms";
+                    File.AppendAllText(Path.Combine(dir, "results.txt"), timing + "\n" + Profiler.Report(12, 20) + "\n");
                     log.LogInfo($"Self-test {timing}; ran {game.updateCount - startCount} ticks -> {path}");
                     NextRun();
                     break;

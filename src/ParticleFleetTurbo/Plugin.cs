@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace ParticleFleetTurbo
 {
-    [BepInPlugin("petru.particlefleet.turbo", "Particle Fleet Turbo", "0.2.0")]
+    [BepInPlugin("petru.particlefleet.turbo", "Particle Fleet Turbo", "0.3.0")]
     public class Plugin : BaseUnityPlugin
     {
         private ConfigEntry<bool> turboEnabled;
@@ -67,7 +67,9 @@ namespace ParticleFleetTurbo
                 Sections.Enabled = true;
                 Sections.Instrument(harmony, AccessTools.Method(typeof(GameSpace), "GameUpdate"));
                 foreach (var m in new[] { AccessTools.Method(typeof(SpaceModule), "GameUpdate"), AccessTools.Method(typeof(Module), "GameUpdate"),
-                    AccessTools.Method(typeof(CommandModule), "GameUpdate"), AccessTools.Method(typeof(Land), "UpdateSubmeshes") })
+                    AccessTools.Method(typeof(CommandModule), "GameUpdate"), AccessTools.Method(typeof(Land), "UpdateSubmeshes"),
+                    AccessTools.Method(typeof(LandOmni), "GameUpdate"), AccessTools.Method(typeof(LandOmni), "FireShot"), AccessTools.Method(typeof(LandUnitManager), "GameUpdate"),
+                    AccessTools.Method(typeof(EnergyMine), "GameUpdate"), AccessTools.Method(typeof(LatheWeapon), "FindTargets") })
                     Sections.Instrument(harmony, m);
             }
             if (dataDir.Value != "")

@@ -23,7 +23,12 @@ Engine:
   rings every tick, even when nothing was there. The search now scans rows in a tight loop and breaks ties in the
   engine's ring order, so it picks the same target.
 - **Land mesh uploads.** Spreading mire rewrote one quad's colour and the game re-uploaded all four vertex arrays
-  of that land chunk (about 2 MB). Now only the arrays that actually changed are uploaded.
+  of that land chunk (about 2 MB). Now only the arrays that actually changed are uploaded. The plasma layer
+  re-uploaded its mesh on every write even when nothing changed; it gets the same treatment.
+- **Land omni target searches.** Every omni looks for something to build, shoot or repair every tick and usually
+  finds nothing. The searches for structures and mire now skip empty map blocks without a function call per
+  block, and the search for land units under construction first does a quick check whether any cell in range
+  could qualify. Both find exactly what the engine would.
 
 Results:
 
@@ -31,6 +36,8 @@ Results:
   script time 40 ms → 19 ms.
 - Exchange map #1494 (no scripts, 16 ships with 230 particle-beam modules, spreading mire): game step
   45 ms → 30 ms (targeting 14.7 ms → 5.4 ms, land mesh 9.5 ms → 3.6 ms).
+- Exchange map #1163 (about 180 land omnis, spreading mire): game step 30 ms → 26 ms; 30 seconds of game took
+  33.2 s, now about 31.5 s (39–42 s with the plugin off).
 
 ## Installing
 
@@ -60,10 +67,11 @@ python3 tools/compare_saves.py run1-turbo-off.pf1 run3-turbo-on.pf1
 differences, as a check that the test can catch stale results. `tests/make_stress_save.py` injects
 `tests/TurboStress.prpl` into a save: a script that renames networks, adds script instances, destroys units and
 mutates list values every tick while querying `GetCoresWithVar`. `SelfTest.VerifyFastPaths = true` also runs the
-engine's own targeting search next to the fast one on every call and reports how many results differed.
+engine's own searches next to the fast ones on every call and reports how many results differed.
 
 `Profiler.SectionTiming = true` (read at startup) splits the engine's own frame time by call site in the profiler
-report, which is how the engine hot spots above were found.
+report, which is how the engine hot spots above were found. The profiler report also lists frames over 100 ms, and
+each self-test run writes a per-frame log (`run<N>-frames.tsv`: frame time, game step time, garbage collections).
 
 ## Building
 

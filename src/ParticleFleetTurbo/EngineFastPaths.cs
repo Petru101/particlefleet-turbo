@@ -162,6 +162,182 @@ namespace ParticleFleetTurbo
     }
 
     /// <summary>
+    /// Struc.GetNearestStruc and Land.GetNearestCoveredLand walk every 3x3 block in range (841 at the omni shot range)
+    /// and call a per-block method that returns at once for an empty block. Same walk, but the empty check is inline
+    /// and only occupied blocks call the engine's per-block search, so the result (first nearest in walk order) is
+    /// unchanged.
+    /// </summary>
+    internal static class BlockSearchPatches
+    {
+        public static long Calls, Mismatches;
+
+        [HarmonyPatch(typeof(Struc), nameof(Struc.GetNearestStruc))]
+        internal static class StrucPatch
+        {
+            [HarmonyReversePatch]
+            [HarmonyPatch(typeof(Struc), "GetNearestStrucLarge")]
+            private static void Block(Struc instance, int lcx, int lcy, int startX, int startY, int R, bool built, ref int closestD2, ref int X, ref int Y) =>
+                throw new System.NotImplementedException();
+
+            [HarmonyReversePatch]
+            [HarmonyPatch(typeof(Struc), nameof(Struc.GetNearestStruc))]
+            private static void Original(Struc instance, int startX, int startY, int R, bool built, out int X, out int Y) =>
+                throw new System.NotImplementedException();
+
+            private static bool Prefix(Struc __instance, int startX, int startY, int R, bool built, out int X, out int Y)
+            {
+                X = Y = -1;
+                if (!Turbo.Enabled)
+                    return true;
+                int[] large = __instance.strucBuiltLargeData;
+                int closest = int.MaxValue, x = int.MaxValue, y = int.MaxValue;
+                int n = R / GameSpace.LARGEGRID_CELLSIZE;
+                int bx = startX / GameSpace.LARGEGRID_CELLSIZE, by = startY / GameSpace.LARGEGRID_CELLSIZE;
+                int w = GameSpace.LARGEGRID_WIDTH, h = GameSpace.LARGEGRID_HEIGHT;
+                for (int i = -n; i <= n; i++)
+                {
+                    int ly = by + i;
+                    if (ly < 0 || ly >= h)
+                        continue;
+                    for (int j = -n; j <= n; j++)
+                    {
+                        int lx = bx + j;
+                        if (lx >= 0 && lx < w && large[lx + ly * w] != 0)
+                            Block(__instance, lx, ly, startX, startY, R, built, ref closest, ref x, ref y);
+                    }
+                }
+                if (x != int.MaxValue)
+                {
+                    X = x;
+                    Y = y;
+                }
+                if (SpaceModuleTargetPatch.Verify)
+                {
+                    Original(__instance, startX, startY, R, built, out int ox, out int oy);
+                    Calls++;
+                    if (ox != X || oy != Y)
+                        Mismatches++;
+                }
+                return false;
+            }
+        }
+
+        [HarmonyPatch(typeof(Land), nameof(Land.GetNearestCoveredLand))]
+        internal static class CoveredLandPatch
+        {
+            [HarmonyReversePatch]
+            [HarmonyPatch(typeof(Land), "GetNearestCoveredLandLarge")]
+            private static void Block(Land instance, int lcx, int lcy, bool enemy, int startX, int startY, int R, int baseLand, ref int closestD2, ref int X, ref int Y) =>
+                throw new System.NotImplementedException();
+
+            [HarmonyReversePatch]
+            [HarmonyPatch(typeof(Land), nameof(Land.GetNearestCoveredLand))]
+            private static void Original(Land instance, bool enemy, int startX, int startY, int R, int baseLand, out int X, out int Y) =>
+                throw new System.NotImplementedException();
+
+            private static bool Prefix(Land __instance, bool enemy, int startX, int startY, int R, int baseLand, out int X, out int Y)
+            {
+                X = Y = -1;
+                if (!Turbo.Enabled)
+                    return true;
+                int[] large = enemy ? __instance.landCoveredBlueLargeData : __instance.landCoveredRedLargeData;
+                int closest = int.MaxValue, x = int.MaxValue, y = int.MaxValue;
+                int n = R / GameSpace.LARGEGRID_CELLSIZE;
+                int bx = startX / GameSpace.LARGEGRID_CELLSIZE, by = startY / GameSpace.LARGEGRID_CELLSIZE;
+                int w = GameSpace.LARGEGRID_WIDTH, h = GameSpace.LARGEGRID_HEIGHT;
+                for (int i = -n; i <= n; i++)
+                {
+                    int ly = by + i;
+                    if (ly < 0 || ly >= h)
+                        continue;
+                    for (int j = -n; j <= n; j++)
+                    {
+                        int lx = bx + j;
+                        if (lx >= 0 && lx < w && large[lx + ly * w] != 0)
+                            Block(__instance, lx, ly, enemy, startX, startY, R, baseLand, ref closest, ref x, ref y);
+                    }
+                }
+                if (x != int.MaxValue)
+                {
+                    X = x;
+                    Y = y;
+                }
+                if (SpaceModuleTargetPatch.Verify)
+                {
+                    Original(__instance, enemy, startX, startY, R, baseLand, out int ox, out int oy);
+                    Calls++;
+                    if (ox != X || oy != Y)
+                        Mismatches++;
+                }
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// LatheWeapon.FireAtLandUnit scans every cell in lathe range (~1250) through Unity null checks and GetCovered calls
+    /// looking for a friendly land unit under construction; usually there is none. A tight pre-scan of the cheap,
+    /// side-effect-free part of its condition skips the engine's scan when no cell can pass it (it would return false
+    /// without doing anything).
+    /// </summary>
+    [HarmonyPatch(typeof(LatheWeapon), "FireAtLandUnit")]
+    internal static class LatheLandUnitPatch
+    {
+        public static long Skipped, Mismatches;
+
+        private static readonly AccessTools.FieldRef<LatheWeapon, float> Ammo = AccessTools.FieldRefAccess<LatheWeapon, float>("ammo");
+
+        private static bool Prefix(LatheWeapon __instance, ref bool __state)
+        {
+            __state = false;
+            if (!Turbo.Enabled)
+                return true;
+            float ammo = Ammo(__instance);
+            if (!(ammo >= __instance.BUILD_RATE && (double)ammo >= 0.15) || AnyCandidate(__instance))
+                return true;
+            Skipped++;
+            __state = true;
+            return SpaceModuleTargetPatch.Verify;
+        }
+
+        private static void Postfix(bool __result, bool __state)
+        {
+            if (__state && __result)
+                Mismatches++;
+        }
+
+        private static bool AnyCandidate(LatheWeapon lathe)
+        {
+            LandUnitManager[] units = Land.instance.landUnits;
+            int[] covered = Land.instance.landCoveredData;
+            int w = GameSpace.GRID_WIDTH, h = GameSpace.GRID_HEIGHT;
+            int cx = lathe.cellX, cy = lathe.cellY;
+            int r = lathe.FIRE_DIST_CELL, r2 = r * r;
+            bool enemy = lathe.enemy;
+            int y0 = System.Math.Max(cy - r, 0), y1 = System.Math.Min(cy + r, h - 1);
+            int x0 = System.Math.Max(cx - r, 0), x1 = System.Math.Min(cx + r, w - 1);
+            for (int y = y0; y <= y1; y++)
+            {
+                int dy = y - cy;
+                int row = y * w;
+                for (int x = x0; x <= x1; x++)
+                {
+                    LandUnitManager unit = units[row + x];
+                    if ((object)unit == null)
+                        continue;
+                    int dx = x - cx;
+                    if (dx * dx + dy * dy > r2)
+                        continue;
+                    int c = covered[row + x];
+                    if (unit != null && enemy == unit.enemy && unit.isBuilding && unit.latheCanBuild && ((enemy && c >= 0) || (!enemy && c <= 0)))
+                        return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Land submeshes re-upload all four vertex arrays (~2 MB) whenever any quad was written, though mire spreading
     /// only changes colors. Track which arrays a write actually changed and upload only those.
     /// </summary>
@@ -272,6 +448,95 @@ namespace ParticleFleetTurbo
                 if (changed.Colors)
                     mesh.colors32 = Colors(__instance);
                 changed.Vs = changed.Uv = changed.Uv1 = changed.Colors = false;
+                __instance.dirty = false;
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Plasma submeshes re-upload vertices and colors whenever a quad was written, though most writes store what was
+    /// already there. Track which arrays a write actually changed and upload only those.
+    /// </summary>
+    internal static class PlasmaSubmeshUploads
+    {
+        private class Changed
+        {
+            public bool Vs, Colors;
+        }
+
+        private static readonly AccessTools.FieldRef<PlasmaSubmesh, Vector3[]> Vs = AccessTools.FieldRefAccess<PlasmaSubmesh, Vector3[]>("vs");
+        private static readonly AccessTools.FieldRef<PlasmaSubmesh, Color32[]> Colors = AccessTools.FieldRefAccess<PlasmaSubmesh, Color32[]>("colors");
+        private static readonly AccessTools.FieldRef<PlasmaSubmesh, Mesh> Lmesh = AccessTools.FieldRefAccess<PlasmaSubmesh, Mesh>("lmesh");
+
+        private static readonly Dictionary<int, Changed> ChangedBySubmesh = new Dictionary<int, Changed>();
+
+        private static Changed For(PlasmaSubmesh submesh)
+        {
+            int id = submesh.GetInstanceID();
+            if (!ChangedBySubmesh.TryGetValue(id, out Changed changed))
+                ChangedBySubmesh[id] = changed = new Changed();
+            return changed;
+        }
+
+        private static void Before(PlasmaSubmesh submesh, int i, int j, out LandSubmeshUploads.Quad state)
+        {
+            int n = (i + j * 126) * 4;
+            Vector3[] vs = Vs(submesh);
+            Color32[] colors = Colors(submesh);
+            state = new LandSubmeshUploads.Quad
+            {
+                V0 = vs[n], V1 = vs[n + 1], V2 = vs[n + 2], V3 = vs[n + 3],
+                C0 = colors[n], C1 = colors[n + 1], C2 = colors[n + 2], C3 = colors[n + 3],
+            };
+        }
+
+        private static void After(PlasmaSubmesh submesh, int i, int j, LandSubmeshUploads.Quad state)
+        {
+            int n = (i + j * 126) * 4;
+            Vector3[] vs = Vs(submesh);
+            Color32[] colors = Colors(submesh);
+            Changed changed = For(submesh);
+            if (!(Same(state.V0, vs[n]) && Same(state.V1, vs[n + 1]) && Same(state.V2, vs[n + 2]) && Same(state.V3, vs[n + 3])))
+                changed.Vs = true;
+            if (!(Same(state.C0, colors[n]) && Same(state.C1, colors[n + 1]) && Same(state.C2, colors[n + 2]) && Same(state.C3, colors[n + 3])))
+                changed.Colors = true;
+        }
+
+        private static bool Same(Vector3 a, Vector3 b) => a.x == b.x && a.y == b.y && a.z == b.z;
+        private static bool Same(Color32 a, Color32 b) => a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+
+        [HarmonyPatch(typeof(PlasmaSubmesh), nameof(PlasmaSubmesh.SetQuadNEW))]
+        internal static class SetQuadNewPatch
+        {
+            private static void Prefix(PlasmaSubmesh __instance, int i, int j, out LandSubmeshUploads.Quad __state) => Before(__instance, i, j, out __state);
+            private static void Postfix(PlasmaSubmesh __instance, int i, int j, LandSubmeshUploads.Quad __state) => After(__instance, i, j, __state);
+        }
+
+        [HarmonyPatch(typeof(PlasmaSubmesh), nameof(PlasmaSubmesh.SetQuad))]
+        internal static class SetQuadPatch
+        {
+            private static void Prefix(PlasmaSubmesh __instance, int i, int j, out LandSubmeshUploads.Quad __state) => Before(__instance, i, j, out __state);
+            private static void Postfix(PlasmaSubmesh __instance, int i, int j, LandSubmeshUploads.Quad __state) => After(__instance, i, j, __state);
+        }
+
+        [HarmonyPatch(typeof(PlasmaSubmesh), nameof(PlasmaSubmesh.UpdateMesh))]
+        internal static class UpdateMeshPatch
+        {
+            private static bool Prefix(PlasmaSubmesh __instance)
+            {
+                Changed changed = For(__instance);
+                if (!Turbo.Enabled || !__instance.dirty)
+                {
+                    changed.Vs = changed.Colors = false;
+                    return true;
+                }
+                Mesh mesh = Lmesh(__instance);
+                if (changed.Vs)
+                    mesh.vertices = Vs(__instance);
+                if (changed.Colors)
+                    mesh.colors32 = Colors(__instance);
+                changed.Vs = changed.Colors = false;
                 __instance.dirty = false;
                 return false;
             }
