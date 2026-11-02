@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace ParticleFleetTurbo
 {
-    [BepInPlugin("petru.particlefleet.turbo", "Particle Fleet Turbo", "0.1.0")]
+    [BepInPlugin("petru.particlefleet.turbo", "Particle Fleet Turbo", "0.2.0")]
     public class Plugin : BaseUnityPlugin
     {
         private ConfigEntry<bool> turboEnabled;

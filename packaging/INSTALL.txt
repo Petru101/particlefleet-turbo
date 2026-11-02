@@ -1,9 +1,9 @@
 Particle Fleet Turbo
 ====================
 
-Makes custom (Exchange) maps with heavy scripts run at full speed. Particle Fleet runs one simulation step per
-frame, so when a map's scripts take too long the whole game runs in slow motion. This mod speeds up the engine
-paths those scripts use; maps play exactly the same, only faster.
+Makes custom (Exchange) maps that run in slow motion run at full speed. Particle Fleet runs one simulation step
+per frame, so when a step takes too long the whole game slows down. This mod speeds up the engine paths heavy maps
+use (map scripts, large fleets of particle beams, spreading mire); maps play exactly the same, only faster.
 
 Install
 -------

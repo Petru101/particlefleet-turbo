@@ -84,8 +84,8 @@ cloud-synced Documents).
   gameoverlayui; ValveSoftware/steam-for-linux#13682), not the mod. Workaround: overlay off for the game.
   `Process.PrivateMemorySize64` returns 0 under Wine: the profiler reports only the managed heap.
 - Hidden test copy: `/run/media/Petru/Games/pf-test/` holds reflinked copies of the game (`game/`, with
-  `steam_appid.txt`), its prefix (`prefix/`) and data (`data/`, used via `DataDir`). `bin/start.sh` (run on the host
-  with host-spawn) starts it in a headless gamescope (Ferret's `test-game/hidden.sh`, unit `hidden-pftest`) with
+  `steam_appid.txt`), its prefix (`prefix/`) and data (`data/`, used via `DataDir`). `bin/start.sh [game dir]` (run on the
+  host with host-spawn; `release/` is a clean copy with a release zip extracted) starts it in a headless gamescope (Ferret's `test-game/hidden.sh`, unit `hidden-pftest`) with
   Proton Experimental directly; with `AutoRunSave` set it self-tests and quits (~1 min per 600-tick run).
   Replace a DLL the running game has loaded by writing a new file and `mv` over it, never `cp` onto it.
 - Loaded saves stop on the opening (fleet/Launch) panel; `GameSpace.GameUpdate` does nothing until it closes.
@@ -101,7 +101,8 @@ cloud-synced Documents).
   This machine now uses the launch option (backups: `localconfig.vdf.before-proton-test`,
   `user.reg.before-proton-test`). Steam must be stopped to edit `localconfig.vdf`, or it overwrites the change.
 - License: MIT (chosen so map makers and other modders can reuse the code freely).
-- Published: GitHub Petru101/particlefleet-turbo, release v0.1.0 (2026-10-16), and a Steam discussions post
+- Published: GitHub Petru101/particlefleet-turbo, releases v0.1.0 (scripts) and v0.2.0 (engine fast paths; its zip
+  was tested on a fresh hidden game copy: loads, 0 missing scripts, self-test off = on), and a Steam discussions post
   (by the user). Knuckle Cracker forum: the user has an account; post in "Map Makers, Ship Builders, and
   Coders" (draft in drafts/, git-ignored).
 - Long-run determinism: three 36000-tick runs of #1402 save-5 differ only in a script's MouseX/MouseY.
