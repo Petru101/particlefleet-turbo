@@ -346,6 +346,7 @@ namespace ParticleFleetTurbo
         private class Changed
         {
             public bool Vs, Uv, Uv1, Colors;
+            public readonly int Phase = MeshUploads.NextPhase++;
         }
 
         public struct Quad
@@ -438,19 +439,78 @@ namespace ParticleFleetTurbo
                     changed.Vs = changed.Uv = changed.Uv1 = changed.Colors = false;
                     return true;
                 }
+                if (!MeshUploads.Due(changed.Phase))
+                    return false;
                 Mesh mesh = Lmesh(__instance);
+                long t = MeshUploads.Begin();
                 if (changed.Vs)
                     mesh.vertices = Vs(__instance);
+                t = MeshUploads.End(0, changed.Vs, t);
                 if (changed.Uv)
                     mesh.uv = Uv(__instance);
+                t = MeshUploads.End(1, changed.Uv, t);
                 if (changed.Uv1)
                     mesh.uv2 = Uv1(__instance);
+                t = MeshUploads.End(2, changed.Uv1, t);
                 if (changed.Colors)
                     mesh.colors32 = Colors(__instance);
+                MeshUploads.End(3, changed.Colors, t);
                 changed.Vs = changed.Uv = changed.Uv1 = changed.Colors = false;
                 __instance.dirty = false;
                 return false;
             }
+        }
+    }
+
+    /// <summary>
+    /// Every write of a land or plasma mesh channel costs ~1.7 ms in Unity 5.3 whatever the channel (it rebuilds the
+    /// whole 63504-vertex buffer), and spreading mire changes uv, uv2 and colours of several chunks every frame. During
+    /// the per-frame mesh refresh, each chunk may upload only on its own turn, one frame in every
+    /// <see cref="Interval"/> (turns are staggered across chunks so the work is spread evenly: bunching it into one
+    /// frame would cost a whole tick at the 30 fps cap). Changes in between accumulate and go out together. Only
+    /// the picture can lag (by Interval - 1 frames); game state is untouched. Other refreshes (loading, editor)
+    /// still upload at once.
+    /// </summary>
+    internal static class MeshUploads
+    {
+        public static int Interval = 6;
+        public static bool InFrameRefresh;
+        public static int NextPhase;
+        public static bool Timing;
+
+        private static readonly string[] Labels = { "land vertices", "land uv", "land uv2", "land colors", "plasma vertices", "plasma colors" };
+        private static readonly long[] Ticks = new long[Labels.Length];
+        private static readonly long[] Counts = new long[Labels.Length];
+
+        public static bool Due(int phase) => !InFrameRefresh || (Time.frameCount + phase) % Interval == 0;
+
+        public static long Begin() => Timing ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
+
+        public static long End(int slot, bool uploaded, long start)
+        {
+            if (!Timing)
+                return 0;
+            long now = System.Diagnostics.Stopwatch.GetTimestamp();
+            if (uploaded)
+            {
+                Ticks[slot] += now - start;
+                Counts[slot]++;
+            }
+            return now;
+        }
+
+        public static string Report(int frames)
+        {
+            var sb = new System.Text.StringBuilder("Mesh uploads (ms/frame, uploads/frame):\n");
+            for (int i = 0; i < Labels.Length; i++)
+                sb.AppendFormat("  {0,8:F3}  {1,6:F2}  {2}\n", Ticks[i] * 1000.0 / System.Diagnostics.Stopwatch.Frequency / frames, Counts[i] / (double)frames, Labels[i]);
+            return sb.ToString();
+        }
+
+        public static void Reset()
+        {
+            System.Array.Clear(Ticks, 0, Ticks.Length);
+            System.Array.Clear(Counts, 0, Counts.Length);
         }
     }
 
@@ -463,6 +523,7 @@ namespace ParticleFleetTurbo
         private class Changed
         {
             public bool Vs, Colors;
+            public readonly int Phase = MeshUploads.NextPhase++;
         }
 
         private static readonly AccessTools.FieldRef<PlasmaSubmesh, Vector3[]> Vs = AccessTools.FieldRefAccess<PlasmaSubmesh, Vector3[]>("vs");
@@ -531,11 +592,16 @@ namespace ParticleFleetTurbo
                     changed.Vs = changed.Colors = false;
                     return true;
                 }
+                if (!MeshUploads.Due(changed.Phase))
+                    return false;
                 Mesh mesh = Lmesh(__instance);
+                long t = MeshUploads.Begin();
                 if (changed.Vs)
                     mesh.vertices = Vs(__instance);
+                t = MeshUploads.End(4, changed.Vs, t);
                 if (changed.Colors)
                     mesh.colors32 = Colors(__instance);
+                MeshUploads.End(5, changed.Colors, t);
                 changed.Vs = changed.Colors = false;
                 __instance.dirty = false;
                 return false;

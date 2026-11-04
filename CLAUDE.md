@@ -12,6 +12,8 @@ Map #1494 (no scripts, 16 player ships with 230 particle-beam "space" modules, s
 `SpaceModule.FindNearestEnemy` (every module scans ~2800 cells every tick) and full land-mesh re-uploads.
 Map #1163 (~180 land omnis with lathes, spreading mire) felt like "a second lost every 10 s": not freezes but most
 frames 34-50 ms. Cost was the omnis' per-tick target searches, which almost always find nothing.
+Map #955 (mire spreading everywhere) ran at ~60% speed: land/plasma mesh writes, ~1.7 ms each in Unity 5.3
+(see notes/mesh-uploads.md).
 
 ## Optimizations (all behind `Turbo.Enabled`, toggled live with F10)
 - `CoresWithVarCache.cs` — caches `GetCrplCoreHoldersWithVar` per (var name, value). Invalidated per name by
@@ -24,7 +26,8 @@ frames 34-50 ms. Cost was the omnis' per-tick target searches, which almost alwa
 - `EngineFastPaths.cs` — `SpaceModule.FindNearestEnemy` as a tight row scan that breaks ties by the engine's ring
   scan order (first cell with the lowest key; `Rank`), calling the engine's own pure cell checks; land submeshes
   upload only the vertex arrays a `SetQuadNEW`/`UpdateNormalTexture` call actually changed (mire = colors only);
-  plasma submeshes likewise. `Struc.GetNearestStruc` / `Land.GetNearestCoveredLand`: same 3x3-block walk, but the
+  plasma submeshes likewise; and during the per-frame refresh each chunk uploads only on its own staggered turn
+  every `[Turbo] MeshUpdateInterval` frames (default 6; only the picture lags). `Struc.GetNearestStruc` / `Land.GetNearestCoveredLand`: same 3x3-block walk, but the
   empty-block test is inline and only occupied blocks call the engine's per-block method (reverse patch).
   `LatheWeapon.FireAtLandUnit`: a tight pre-scan of the pure part of its condition skips the engine's scan when
   no cell can pass (it would return false with no side effects).
@@ -48,6 +51,9 @@ GameSpace.Update 29.8 → ~26 ms, 30 s of game took 33.2 s → 31.2-31.8 s headl
 ~4.4 ms, land colour uploads 3.6 ms, many sub-1 ms costs (`FireAtUnit`, `PackSource.HookUp`...).
 Later runs in one session are slower (+5-6 ms by run 3, heap/GC growth), so compare runs in the same position
 (`[SelfTest] Order`, e.g. `on,off,on`).
+
+## Notes files
+- `notes/mesh-uploads.md` — why land/plasma mesh writes are slow, what was ruled out, the interval results.
 
 ## Layout
 - `src/ParticleFleetTurbo/` — plugin (net35). `Plugin.cs` hooks + config/hotkeys, `Profiler.cs` per-script timing
@@ -96,7 +102,8 @@ cloud-synced Documents).
   `Process.PrivateMemorySize64` returns 0 under Wine: the profiler reports only the managed heap.
 - Hidden test copy: `/run/media/Petru/Games/pf-test/` holds reflinked copies of the game (`game/`, with
   `steam_appid.txt`), its prefix (`prefix/`) and data (`data/`, used via `DataDir`). `bin/start.sh [game dir]` (run on the
-  host with host-spawn; `release/` is a clean copy with a release zip extracted) starts it in a headless gamescope (Ferret's `test-game/hidden.sh`, unit `hidden-pftest`) with
+  host with host-spawn; `release/` is a clean copy with a release zip extracted) starts it in a headless gamescope (extra arguments after the game dir go to the game, e.g. `-force-d3d11`;
+  `bin/start-wined3d.sh` uses WineD3D instead of DXVK; Ferret's `test-game/hidden.sh`, unit `hidden-pftest`) with
   Proton Experimental directly; with `AutoRunSave` set it self-tests and quits (~1 min per 600-tick run).
   Replace a DLL the running game has loaded by writing a new file and `mv` over it, never `cp` onto it.
 - Loaded saves stop on the opening (fleet/Launch) panel; `GameSpace.GameUpdate` does nothing until it closes.
@@ -112,8 +119,8 @@ cloud-synced Documents).
   This machine now uses the launch option (backups: `localconfig.vdf.before-proton-test`,
   `user.reg.before-proton-test`). Steam must be stopped to edit `localconfig.vdf`, or it overwrites the change.
 - License: MIT (chosen so map makers and other modders can reuse the code freely).
-- Published: GitHub Petru101/particlefleet-turbo, releases v0.1.0 (scripts), v0.2.0 (engine fast paths) and v0.3.0
-  (omni searches, plasma uploads; each release zip
+- Published: GitHub Petru101/particlefleet-turbo, releases v0.1.0 (scripts), v0.2.0 (engine fast paths), v0.3.0
+  (omni searches, plasma uploads) and v0.4.0 (staggered mesh redraws; each release zip
   was tested on a fresh hidden game copy: loads, 0 missing scripts, self-test off = on), and a Steam discussions post
   (by the user). Knuckle Cracker forum: the user has an account; post in "Map Makers, Ship Builders, and
   Coders" (draft in drafts/, git-ignored).

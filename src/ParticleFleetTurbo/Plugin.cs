@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace ParticleFleetTurbo
 {
-    [BepInPlugin("petru.particlefleet.turbo", "Particle Fleet Turbo", "0.3.0")]
+    [BepInPlugin("petru.particlefleet.turbo", "Particle Fleet Turbo", "0.4.0")]
     public class Plugin : BaseUnityPlugin
     {
         private ConfigEntry<bool> turboEnabled;
@@ -15,6 +15,7 @@ namespace ParticleFleetTurbo
         private ConfigEntry<bool> profilerEnabled;
         private ConfigEntry<bool> statementTiming;
         private ConfigEntry<bool> sectionTiming;
+        private ConfigEntry<int> meshUpdateInterval;
         private ConfigEntry<KeyboardShortcut> selfTestKey;
         private ConfigEntry<int> selfTestTicks;
         private ConfigEntry<bool> selfTestBrokenCacheRun;
@@ -47,6 +48,8 @@ namespace ParticleFleetTurbo
             profilerEnabled = Config.Bind("Profiler", "Enabled", false, "Always measure time spent in PRPL scripts and log a report periodically (it is also on while the overlay is shown).");
             statementTiming = Config.Bind("Profiler", "StatementTiming", false, "Also time each PRPL command type (adds overhead to cheap commands).");
             sectionTiming = Config.Bind("Profiler", "SectionTiming", false, "Also split the engine's own per-frame time into sections (read at startup).");
+            meshUpdateInterval = Config.Bind("Turbo", "MeshUpdateInterval", 6,
+                "Redraw a changed land or plasma chunk only every this many frames, chunks taking turns (1 = every frame, like the game). Saves a lot on maps with spreading mire; only the picture can lag, by up to this many frames minus one.");
             overlayKey = Config.Bind("Profiler", "OverlayKey", new KeyboardShortcut(KeyCode.F9), "Toggle the on-screen profiler overlay.");
             reportSeconds = Config.Bind("Profiler", "ReportSeconds", 10f, "Seconds between profiler reports in the BepInEx log.");
         }
@@ -62,9 +65,11 @@ namespace ParticleFleetTurbo
             SpaceModuleTargetPatch.Verify = verifyFastPaths.Value;
             var harmony = new Harmony("petru.particlefleet.turbo");
             harmony.PatchAll(typeof(Plugin).Assembly);
+            MeshUploads.Interval = System.Math.Max(1, meshUpdateInterval.Value);
             if (sectionTiming.Value)
             {
                 Sections.Enabled = true;
+                MeshUploads.Timing = true;
                 Sections.Instrument(harmony, AccessTools.Method(typeof(GameSpace), "GameUpdate"));
                 foreach (var m in new[] { AccessTools.Method(typeof(SpaceModule), "GameUpdate"), AccessTools.Method(typeof(Module), "GameUpdate"),
                     AccessTools.Method(typeof(CommandModule), "GameUpdate"), AccessTools.Method(typeof(Land), "UpdateSubmeshes"),
@@ -147,14 +152,18 @@ namespace ParticleFleetTurbo
         {
             Profiler.UpdateBegin();
             Sections.Begin();
+            MeshUploads.InFrameRefresh = Turbo.Enabled;
         }
 
         private static void Postfix(GameSpace __instance)
         {
+            MeshUploads.InFrameRefresh = false;
             Sections.End();
             Profiler.UpdateEnd(Time.unscaledDeltaTime);
             SelfTest.AfterGameUpdate(__instance);
         }
+
+        private static void Finalizer() => MeshUploads.InFrameRefresh = false;
     }
 
     [HarmonyPatch(typeof(CrplCore), "ProcessCommands")]

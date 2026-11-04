@@ -144,6 +144,8 @@ namespace ParticleFleetTurbo
 
             if (Sections.Enabled)
                 sb.Append(Sections.Report(frames, 30));
+            if (MeshUploads.Timing)
+                sb.Append(MeshUploads.Report(frames));
             if (!StatementTiming)
                 return sb.ToString();
             sb.Append("Statements (ms/frame, calls/frame, us/call):\n");
@@ -159,6 +161,7 @@ namespace ParticleFleetTurbo
             Array.Clear(StatementTicks, 0, StatementTicks.Length);
             Array.Clear(StatementCalls, 0, StatementCalls.Length);
             Sections.Reset();
+            MeshUploads.Reset();
             updateTicks = crplTicks = 0;
             frameSeconds = longFrameSeconds = 0;
             frames = 0;

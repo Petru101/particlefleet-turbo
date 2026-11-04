@@ -25,6 +25,12 @@ Engine:
 - **Land mesh uploads.** Spreading mire rewrote one quad's colour and the game re-uploaded all four vertex arrays
   of that land chunk (about 2 MB). Now only the arrays that actually changed are uploaded. The plasma layer
   re-uploaded its mesh on every write even when nothing changed; it gets the same treatment.
+- **Land and plasma redraws (mire-heavy maps).** In Unity 5.3 every change to a land or plasma chunk's mesh costs
+  about 1.7 ms, because Unity rebuilds the chunk's whole display buffer. When mire spreads across the map, most
+  chunks change every frame, which alone can exceed the frame budget. During play, a changed chunk now redraws on
+  its own turn, once every 6 frames, with chunks taking turns so the work is spread evenly. This is the one change
+  that affects what you see: the land's picture can trail the game by up to 1/6 of a second. The game itself is
+  unaffected. `Turbo.MeshUpdateInterval` sets the number of frames (1 = redraw every frame, like the game).
 - **Land omni target searches.** Every omni looks for something to build, shoot or repair every tick and usually
   finds nothing. The searches for structures and mire now skip empty map blocks without a function call per
   block, and the search for land units under construction first does a quick check whether any cell in range
@@ -38,6 +44,8 @@ Results:
   45 ms → 30 ms (targeting 14.7 ms → 5.4 ms, land mesh 9.5 ms → 3.6 ms).
 - Exchange map #1163 (about 180 land omnis, spreading mire): game step 30 ms → 26 ms; 30 seconds of game took
   33.2 s, now about 31.5 s (39–42 s with the plugin off).
+- Exchange map #955 (mire spreading across the whole map): frame time 75–82 ms with the plugin off, about 35 ms
+  with it on (median 33.2 ms: full speed).
 
 ## Installing
 
