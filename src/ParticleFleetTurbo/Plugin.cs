@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace ParticleFleetTurbo
 {
-    [BepInPlugin("petru.particlefleet.turbo", "Particle Fleet Turbo", "0.4.0")]
+    [BepInPlugin("petru.particlefleet.turbo", "Particle Fleet Turbo", "0.5.0")]
     public class Plugin : BaseUnityPlugin
     {
         private ConfigEntry<bool> turboEnabled;
@@ -15,6 +15,8 @@ namespace ParticleFleetTurbo
         private ConfigEntry<bool> profilerEnabled;
         private ConfigEntry<bool> statementTiming;
         private ConfigEntry<bool> sectionTiming;
+        private ConfigEntry<string> sectionMethods;
+        private ConfigEntry<string> timedMethods;
         private ConfigEntry<int> meshUpdateInterval;
         private ConfigEntry<KeyboardShortcut> selfTestKey;
         private ConfigEntry<int> selfTestTicks;
@@ -48,6 +50,11 @@ namespace ParticleFleetTurbo
             profilerEnabled = Config.Bind("Profiler", "Enabled", false, "Always measure time spent in PRPL scripts and log a report periodically (it is also on while the overlay is shown).");
             statementTiming = Config.Bind("Profiler", "StatementTiming", false, "Also time each PRPL command type (adds overhead to cheap commands).");
             sectionTiming = Config.Bind("Profiler", "SectionTiming", false, "Also split the engine's own per-frame time into sections (read at startup).");
+            sectionMethods = Config.Bind("Profiler", "SectionMethods",
+                "GameSpace.GameUpdate, SpaceModule.GameUpdate, Module.GameUpdate, CommandModule.GameUpdate, Land.UpdateSubmeshes",
+                "Methods (Type.Method, comma-separated) whose calls SectionTiming splits; every mark adds a little time, so fine-grained lists overstate small, frequent calls.");
+            timedMethods = Config.Bind("Profiler", "TimedMethods", "",
+                "Methods (Type.Method, comma-separated) to time from start to return in the profiler report (read at startup).");
             meshUpdateInterval = Config.Bind("Turbo", "MeshUpdateInterval", 6,
                 "Redraw a changed land or plasma chunk only every this many frames, chunks taking turns (1 = every frame, like the game). Saves a lot on maps with spreading mire; only the picture can lag, by up to this many frames minus one.");
             overlayKey = Config.Bind("Profiler", "OverlayKey", new KeyboardShortcut(KeyCode.F9), "Toggle the on-screen profiler overlay.");
@@ -70,12 +77,26 @@ namespace ParticleFleetTurbo
             {
                 Sections.Enabled = true;
                 MeshUploads.Timing = true;
-                Sections.Instrument(harmony, AccessTools.Method(typeof(GameSpace), "GameUpdate"));
-                foreach (var m in new[] { AccessTools.Method(typeof(SpaceModule), "GameUpdate"), AccessTools.Method(typeof(Module), "GameUpdate"),
-                    AccessTools.Method(typeof(CommandModule), "GameUpdate"), AccessTools.Method(typeof(Land), "UpdateSubmeshes"),
-                    AccessTools.Method(typeof(LandOmni), "GameUpdate"), AccessTools.Method(typeof(LandOmni), "FireShot"), AccessTools.Method(typeof(LandUnitManager), "GameUpdate"),
-                    AccessTools.Method(typeof(EnergyMine), "GameUpdate"), AccessTools.Method(typeof(LatheWeapon), "FindTargets") })
-                    Sections.Instrument(harmony, m);
+                foreach (string name in sectionMethods.Value.Split(','))
+                {
+                    string[] parts = name.Trim().Split('.');
+                    var method = parts.Length == 2 ? AccessTools.Method(AccessTools.TypeByName(parts[0]), parts[1]) : null;
+                    if (method != null)
+                        Sections.Instrument(harmony, method);
+                    else
+                        Logger.LogWarning("SectionMethods: no method " + name);
+                }
+            }
+            foreach (string name in timedMethods.Value.Split(','))
+            {
+                if (name.Trim() == "")
+                    continue;
+                string[] parts = name.Trim().Split('.');
+                var method = parts.Length == 2 ? AccessTools.Method(AccessTools.TypeByName(parts[0]), parts[1]) : null;
+                if (method != null)
+                    MethodTimer.Time(harmony, method);
+                else
+                    Logger.LogWarning("TimedMethods: no method " + name);
             }
             if (dataDir.Value != "")
             {

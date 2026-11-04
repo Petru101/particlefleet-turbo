@@ -156,7 +156,8 @@ namespace ParticleFleetTurbo
                                     $"GameSpace.Update {Profiler.UpdateMs:F1} ms, scripts {Profiler.ScriptMs:F1} ms" +
                                     (SpaceModuleTargetPatch.Verify ? $", target search verified {SpaceModuleTargetPatch.Calls} calls, {SpaceModuleTargetPatch.Mismatches} mismatches" +
                                      $", block searches {BlockSearchPatches.Calls} calls, {BlockSearchPatches.Mismatches} mismatches" +
-                                     $", lathe land unit skips {LatheLandUnitPatch.Skipped}, {LatheLandUnitPatch.Mismatches} mismatches" : "");
+                                     $", lathe land unit skips {LatheLandUnitPatch.Skipped}, {LatheLandUnitPatch.Mismatches} mismatches" +
+                                     $", attraction fields {AttractionFieldPatch.Calls} calls, {AttractionFieldPatch.Mismatches} mismatches" : "");
                     File.WriteAllText(Path.Combine(dir, $"run{runIndex}-frames.tsv"), Profiler.FrameLog.ToString());
                     Profiler.FrameLog = null;
                     var gcWatch = System.Diagnostics.Stopwatch.StartNew();

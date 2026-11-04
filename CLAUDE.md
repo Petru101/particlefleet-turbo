@@ -14,6 +14,9 @@ Map #1163 (~180 land omnis with lathes, spreading mire) felt like "a second lost
 frames 34-50 ms. Cost was the omnis' per-tick target searches, which almost always find nothing.
 Map #955 (mire spreading everywhere) ran at ~60% speed: land/plasma mesh writes, ~1.7 ms each in Unity 5.3
 (see notes/mesh-uploads.md).
+Map #1276 (16 big ships, ~1100 modules, 134 land omnis, 2500 particles) has no single hot spot: 92-106 ms off,
+55 ms with 0.4.0, ~47 ms now. Left: lathe beam drawing (`LatheLineManager.SetPositions` restarts two particle
+systems every call, 2.6 ms; skipping that would change the look), land redraws, hull updates, particles.
 
 ## Optimizations (all behind `Turbo.Enabled`, toggled live with F10)
 - `CoresWithVarCache.cs` — caches `GetCrplCoreHoldersWithVar` per (var name, value). Invalidated per name by
@@ -31,6 +34,12 @@ Map #955 (mire spreading everywhere) ran at ~60% speed: land/plasma mesh writes,
   empty-block test is inline and only occupied blocks call the engine's per-block method (reverse patch).
   `LatheWeapon.FireAtLandUnit`: a tight pre-scan of the pure part of its condition skips the engine's scan when
   no cell can pass (it would return false with no side effects).
+- `ShipFastPaths.cs` — `CommandModule.SetAttractionFields` uses a per-offset vector table (built on first use with
+  the engine's expressions, inside a tick, so float state matches; verified cell by cell). Ship range circles
+  (`ModuleRangeIndicator.RefreshModuleRangeIndicators`) are rebuilt only while visible: deferred while the
+  `CombinedCircles` object is inactive and done in a `CombinedCircles.Show` postfix (every activation goes there;
+  the user checked select and hover in the real game: circles show fine).
+  Tried and dropped: hoisting `cm.transform.position` out of `ShipPlan.UpdateHullSections` (no measurable gain).
 
 ## Verification
 F11 self-test (`SelfTest.cs`): snapshots the mission, replays 300 ticks with Turbo off/off/on (auto-presses the
@@ -61,7 +70,10 @@ Later runs in one session are slower (+5-6 ms by run 3, heap/GC growth), so comp
   `Command::statement` load in `CrplCore.ProcessCommands`; it inflates cheap commands, so off by default).
   `Sections.cs` (`[Profiler] SectionTiming`, read at startup) splits engine time by call site: a transpiler marks
   every game/Unity call in the instrumented methods (list in `Plugin.Start`); parameterless virtual calls are split
-  by receiver type. That is how #1494's and #1163's hot spots were found. Profiler reports list frames over 100 ms
+  by receiver type (`[Profiler] SectionMethods` lists the methods). Marks are flat, so time in untimed code after
+  a mark is charged to it, and every mark costs a little: fine lists overstate small, frequent calls.
+  `MethodTimer.cs` (`[Profiler] TimedMethods`) times listed methods start to return instead (honest totals).
+  That is how #1494's, #1163's and #1276's hot spots were found. Profiler reports list frames over 100 ms
   (with the previous frame's update time and GC count), and each self-test run writes `run<N>-frames.tsv`
   (frame ms, update ms, GCs) and times a forced GC (~45 ms at 250 MB, so GC pauses aren't the problem).
 - `tools/` — Python `.pf1` reader/writer (`pfnbt.py`) and save differ. `tools/patch1402.py` (the one-off #1402
@@ -120,7 +132,8 @@ cloud-synced Documents).
   `user.reg.before-proton-test`). Steam must be stopped to edit `localconfig.vdf`, or it overwrites the change.
 - License: MIT (chosen so map makers and other modders can reuse the code freely).
 - Published: GitHub Petru101/particlefleet-turbo, releases v0.1.0 (scripts), v0.2.0 (engine fast paths), v0.3.0
-  (omni searches, plasma uploads) and v0.4.0 (staggered mesh redraws; each release zip
+  (omni searches, plasma uploads), v0.4.0 (staggered mesh redraws) and v0.5.0
+  (attraction field table, deferred range circles; each release zip
   was tested on a fresh hidden game copy: loads, 0 missing scripts, self-test off = on), and a Steam discussions post
   (by the user). Knuckle Cracker forum: the user has an account; post in "Map Makers, Ship Builders, and
   Coders" (draft in drafts/, git-ignored).

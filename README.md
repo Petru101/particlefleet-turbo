@@ -31,6 +31,11 @@ Engine:
   its own turn, once every 6 frames, with chunks taking turns so the work is spread evenly. This is the one change
   that affects what you see: the land's picture can trail the game by up to 1/6 of a second. The game itself is
   unaffected. `Turbo.MeshUpdateInterval` sets the number of frames (1 = redraw every frame, like the game).
+- **Ship attraction fields.** Each time a ship moves a cell, it adds and removes its pull on about 2,000
+  surrounding cells, recomputing an angle, distance, sine and cosine per cell. These depend only on the offset, so
+  they now come from a table built with the engine's own formulas (checked cell by cell against the original).
+- **Ship range circles.** Ships rebuilt their weapon range circles almost every tick in battle, though they are
+  only visible on a selected or hovered ship. Hidden circles are now rebuilt when they are shown.
 - **Land omni target searches.** Every omni looks for something to build, shoot or repair every tick and usually
   finds nothing. The searches for structures and mire now skip empty map blocks without a function call per
   block, and the search for land units under construction first does a quick check whether any cell in range
@@ -46,6 +51,8 @@ Results:
   33.2 s, now about 31.5 s (39–42 s with the plugin off).
 - Exchange map #955 (mire spreading across the whole map): frame time 75–82 ms with the plugin off, about 35 ms
   with it on (median 33.2 ms: full speed).
+- Exchange map #1276 (16 large ships with ~1,100 modules, 134 land omnis, 2,500 particles): frame time 92 ms with
+  the plugin off, 55 ms with 0.4.0, 47 ms now. The rest is spread over many small costs.
 
 ## Installing
 
@@ -78,7 +85,8 @@ mutates list values every tick while querying `GetCoresWithVar`. `SelfTest.Verif
 engine's own searches next to the fast ones on every call and reports how many results differed.
 
 `Profiler.SectionTiming = true` (read at startup) splits the engine's own frame time by call site in the profiler
-report, which is how the engine hot spots above were found. The profiler report also lists frames over 100 ms, and
+report (`Profiler.SectionMethods` picks the methods), and `Profiler.TimedMethods` times listed methods from start
+to return, which is how the engine hot spots above were found. The profiler report also lists frames over 100 ms, and
 each self-test run writes a per-frame log (`run<N>-frames.tsv`: frame time, game step time, garbage collections).
 
 ## Building
