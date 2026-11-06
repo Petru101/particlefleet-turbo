@@ -17,6 +17,10 @@ Map #955 (mire spreading everywhere) ran at ~60% speed: land/plasma mesh writes,
 Map #1276 (16 big ships, ~1100 modules, 134 land omnis, 2500 particles) has no single hot spot: 92-106 ms off,
 55 ms with 0.4.0, ~47 ms now. Left: lathe beam drawing (`LatheLineManager.SetPositions` restarts two particle
 systems every call, 2.6 ms; skipping that would change the look), land redraws, hull updates, particles.
+Map #504 (24 ships, 108 land omnis, 5000 particles + 8200 bonds) is 51 ms with 0.5.0 (72 off) and nothing
+safe is left that pays: particle physics (~11 ms) is bound by scattered memory reads, not code (see Tried and dropped).
+Map #1990 (ships, otherwise near full speed) "kept doing tiny freezes": garbage collections, ~40 ms every 6 s, driven by
+533 KB of garbage per frame. Near the 33 ms budget a GC pause is a visible hitch even though the average looks fine.
 
 ## Optimizations (all behind `Turbo.Enabled`, toggled live with F10)
 - `CoresWithVarCache.cs` — caches `GetCrplCoreHoldersWithVar` per (var name, value). Invalidated per name by
@@ -39,7 +43,21 @@ systems every call, 2.6 ms; skipping that would change the look), land redraws, 
   (`ModuleRangeIndicator.RefreshModuleRangeIndicators`) are rebuilt only while visible: deferred while the
   `CombinedCircles` object is inactive and done in a `CombinedCircles.Show` postfix (every activation goes there;
   the user checked select and hover in the real game: circles show fine).
-  Tried and dropped: hoisting `cm.transform.position` out of `ShipPlan.UpdateHullSections` (no measurable gain).
+  Rebuilds of visible circles (selected or hovered ship, in pairs whenever it gains or loses a module) cost ~130 ms for
+  ~180 circles, seen as 130-230 ms frames in real play on #1990 but never in plain headless runs; `CombinedCircles.IsWithinRadius`
+  now uses per-type arrays, last-hit circle first: ~20 ms per rebuild, 1.7M checks 0 mismatches.
+  `[SelfTest] ShowRangeCircles` keeps all ships' circles visible during runs, to test this headless.
+- `GarbageFastPaths.cs` — removes per-tick garbage, keeping results the same: `VirtualParticle.SetPosition` copies its
+  cell's list once per hull cell to look for enemy hull (~410 KB/frame), now only when an entry can collide
+  (transpiler, empty array otherwise); `ParticleSystemManager.GameUpdate` calls native `Internal_Simulate` directly
+  for effects with no child transforms (Unity's `Simulate` allocates a closure and enumerator; ~45 KB); `ShipPlan.ScanHull`
+  reuses its grid, list and queue (~42 KB; its one caller drops them before the next scan). #1990: 533 → 48 KB/frame;
+  60 s of game: 9 GCs → 0, frames over 50 ms 12 → 0, mean 35.2 → 33.6 ms (update 26 → 22.4), off = on saves.
+- Tried and dropped (each A/B-tested by swapping DLLs, Turbo on, same run position):
+  hoisting `cm.transform.position` out of `ShipPlan.UpdateHullSections` (no gain); an inline
+  `Particle.InteractNearby` (same cells, skipping no-op `UpdateGrid` calls; saves identical but 0 ms gained, though
+  MethodTimer showed 5.6 → 1.6 ms); skipping lathe beam Stop/Play while already playing (1.3 ms, may change the
+  look); a mask-based `GameControls.CreateCircleOfStrucs` for energy mines (0.1 ms).
 
 ## Verification
 F11 self-test (`SelfTest.cs`): snapshots the mission, replays 300 ticks with Turbo off/off/on (auto-presses the
@@ -72,10 +90,15 @@ Later runs in one session are slower (+5-6 ms by run 3, heap/GC growth), so comp
   every game/Unity call in the instrumented methods (list in `Plugin.Start`); parameterless virtual calls are split
   by receiver type (`[Profiler] SectionMethods` lists the methods). Marks are flat, so time in untimed code after
   a mark is charged to it, and every mark costs a little: fine lists overstate small, frequent calls.
-  `MethodTimer.cs` (`[Profiler] TimedMethods`) times listed methods start to return instead (honest totals).
+  `MethodTimer.cs` (`[Profiler] TimedMethods`; `Type.Method()` picks the parameterless overload) times listed
+  methods start to return instead. Honest for methods called up to a few hundred times a frame; for thousands of
+  calls it inflates badly (timer cost plus the Harmony-patched copy running slower), so confirm any gain by
+  swapping DLLs (with/without the change) in single Turbo-on runs before trusting it.
   That is how #1494's, #1163's and #1276's hot spots were found. Profiler reports list frames over 100 ms
   (with the previous frame's update time and GC count), and each self-test run writes `run<N>-frames.tsv`
-  (frame ms, update ms, GCs) and times a forced GC (~45 ms at 250 MB, so GC pauses aren't the problem).
+  (frame ms, previous update ms, GCs; the spike shows on the row after its GC) and times a forced GC (~40 ms at 250 MB:
+small next to a slow frame, but a visible hitch on a map near 33 ms). `[Profiler] AllocTracking` (with SectionTiming)
+charges heap growth to sections, which found #1990's garbage; the heap grows in blocks, so read totals over many frames.
 - `tools/` — Python `.pf1` reader/writer (`pfnbt.py`) and save differ. `tools/patch1402.py` (the one-off #1402
   map patcher) is git-ignored and kept local: it quotes the map author's scripts, which aren't ours to publish.
 - `tests/` — cache-invalidation stress script and the save injector.
@@ -132,8 +155,8 @@ cloud-synced Documents).
   `user.reg.before-proton-test`). Steam must be stopped to edit `localconfig.vdf`, or it overwrites the change.
 - License: MIT (chosen so map makers and other modders can reuse the code freely).
 - Published: GitHub Petru101/particlefleet-turbo, releases v0.1.0 (scripts), v0.2.0 (engine fast paths), v0.3.0
-  (omni searches, plasma uploads), v0.4.0 (staggered mesh redraws) and v0.5.0
-  (attraction field table, deferred range circles; each release zip
+  (omni searches, plasma uploads), v0.4.0 (staggered mesh redraws), v0.5.0
+  (attraction field table, deferred range circles) and v0.6.0 (less garbage, faster visible range circles; each release zip
   was tested on a fresh hidden game copy: loads, 0 missing scripts, self-test off = on), and a Steam discussions post
   (by the user). Knuckle Cracker forum: the user has an account; post in "Map Makers, Ship Builders, and
   Coders" (draft in drafts/, git-ignored).

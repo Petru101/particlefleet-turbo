@@ -18,10 +18,15 @@ namespace ParticleFleetTurbo
     {
         public static bool Enabled;
 
-        private static readonly List<string> Labels = new List<string> { "GameSpace.Update (before first mark)" };
-        private static readonly List<Dictionary<Type, int>> TypedIds = new List<Dictionary<Type, int>> { null };
+        /// <summary>Also charge managed heap growth to the sections (<c>[Profiler] AllocTracking</c>). The heap grows in blocks, so only totals over many frames mean anything.</summary>
+        public static bool TrackAllocs;
+
+        private static readonly List<string> Labels = new List<string> { "GameSpace.Update (before first mark)", "outside GameSpace.Update" };
+        private static readonly List<Dictionary<Type, int>> TypedIds = new List<Dictionary<Type, int>> { null, null };
         private static long[] ticks = new long[256];
         private static long[] calls = new long[256];
+        private static long[] bytes = new long[256];
+        private static long lastHeap;
         private static int current = -1;
         private static long last;
 
@@ -29,8 +34,19 @@ namespace ParticleFleetTurbo
         {
             if (!Enabled || !Profiler.Enabled)
                 return;
+            ChargeAllocs(1);
             current = 0;
             last = Stopwatch.GetTimestamp();
+        }
+
+        private static void ChargeAllocs(int section)
+        {
+            if (!TrackAllocs)
+                return;
+            long heap = GC.GetTotalMemory(false);
+            if (heap > lastHeap)
+                bytes[section] += heap - lastHeap;
+            lastHeap = heap;
         }
 
         public static void End()
@@ -38,6 +54,7 @@ namespace ParticleFleetTurbo
             if (!Enabled || current < 0)
                 return;
             ticks[current] += Stopwatch.GetTimestamp() - last;
+            ChargeAllocs(current);
             current = -1;
         }
 
@@ -47,6 +64,7 @@ namespace ParticleFleetTurbo
                 return;
             long now = Stopwatch.GetTimestamp();
             ticks[current] += now - last;
+            ChargeAllocs(current);
             calls[id]++;
             current = id;
             last = now;
@@ -71,6 +89,7 @@ namespace ParticleFleetTurbo
             {
                 Array.Resize(ref ticks, ticks.Length * 2);
                 Array.Resize(ref calls, calls.Length * 2);
+                Array.Resize(ref bytes, bytes.Length * 2);
             }
             return Labels.Count - 1;
         }
@@ -118,6 +137,12 @@ namespace ParticleFleetTurbo
             double msPerTick = 1000.0 / Stopwatch.Frequency;
             foreach (int i in Enumerable.Range(0, Labels.Count).Where(i => ticks[i] > 0).OrderByDescending(i => ticks[i]).Take(top))
                 sb.AppendFormat("  {0,8:F3}  {1,8:F0}  {2}\n", ticks[i] * msPerTick / frames, calls[i] / (double)frames, Labels[i]);
+            if (TrackAllocs)
+            {
+                sb.AppendFormat("Managed allocations (KB/frame), total {0:F1}:\n", bytes.Sum() / 1024.0 / frames);
+                foreach (int i in Enumerable.Range(0, Labels.Count).Where(i => bytes[i] > 0).OrderByDescending(i => bytes[i]).Take(top))
+                    sb.AppendFormat("  {0,8:F1}  {1}\n", bytes[i] / 1024.0 / frames, Labels[i]);
+            }
             return sb.ToString();
         }
 
@@ -125,6 +150,7 @@ namespace ParticleFleetTurbo
         {
             Array.Clear(ticks, 0, ticks.Length);
             Array.Clear(calls, 0, calls.Length);
+            Array.Clear(bytes, 0, bytes.Length);
         }
     }
 }

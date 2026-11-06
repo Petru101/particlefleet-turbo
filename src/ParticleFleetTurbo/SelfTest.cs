@@ -84,6 +84,7 @@ namespace ParticleFleetTurbo
 
         /// <summary>Turbo state of each run, e.g. "off,off,on".</summary>
         public static string Order = "off,off,on";
+        public static bool ShowRangeCircles;
 
         private static void Begin(bool brokenCacheRun)
         {
@@ -146,6 +147,11 @@ namespace ParticleFleetTurbo
                     state = State.Running;
                     break;
                 case State.Running:
+                    if (ShowRangeCircles)
+                    {
+                        foreach (CommandModule ship in game.commandModules)
+                            ship.moduleRangeIndicators.Show();
+                    }
                     if (game.updateCount - startCount < ticks)
                         return;
                     game.paused = true;
@@ -157,7 +163,8 @@ namespace ParticleFleetTurbo
                                     (SpaceModuleTargetPatch.Verify ? $", target search verified {SpaceModuleTargetPatch.Calls} calls, {SpaceModuleTargetPatch.Mismatches} mismatches" +
                                      $", block searches {BlockSearchPatches.Calls} calls, {BlockSearchPatches.Mismatches} mismatches" +
                                      $", lathe land unit skips {LatheLandUnitPatch.Skipped}, {LatheLandUnitPatch.Mismatches} mismatches" +
-                                     $", attraction fields {AttractionFieldPatch.Calls} calls, {AttractionFieldPatch.Mismatches} mismatches" : "");
+                                     $", attraction fields {AttractionFieldPatch.Calls} calls, {AttractionFieldPatch.Mismatches} mismatches" +
+                                     $", circle overlaps {CircleOverlapPatch.Calls} calls, {CircleOverlapPatch.Mismatches} mismatches" : "");
                     File.WriteAllText(Path.Combine(dir, $"run{runIndex}-frames.tsv"), Profiler.FrameLog.ToString());
                     Profiler.FrameLog = null;
                     var gcWatch = System.Diagnostics.Stopwatch.StartNew();

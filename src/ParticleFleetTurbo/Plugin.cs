@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace ParticleFleetTurbo
 {
-    [BepInPlugin("petru.particlefleet.turbo", "Particle Fleet Turbo", "0.5.0")]
+    [BepInPlugin("petru.particlefleet.turbo", "Particle Fleet Turbo", "0.6.0")]
     public class Plugin : BaseUnityPlugin
     {
         private ConfigEntry<bool> turboEnabled;
@@ -15,6 +15,7 @@ namespace ParticleFleetTurbo
         private ConfigEntry<bool> profilerEnabled;
         private ConfigEntry<bool> statementTiming;
         private ConfigEntry<bool> sectionTiming;
+        private ConfigEntry<bool> allocTracking;
         private ConfigEntry<string> sectionMethods;
         private ConfigEntry<string> timedMethods;
         private ConfigEntry<int> meshUpdateInterval;
@@ -23,6 +24,7 @@ namespace ParticleFleetTurbo
         private ConfigEntry<bool> selfTestBrokenCacheRun;
         private ConfigEntry<string> selfTestOrder;
         private ConfigEntry<bool> verifyFastPaths;
+        private ConfigEntry<bool> showRangeCircles;
         private ConfigEntry<string> autoRunSave;
         private ConfigEntry<string> dataDir;
         private bool autoRunStarted;
@@ -43,6 +45,7 @@ namespace ParticleFleetTurbo
                 "Add a run with cache invalidation disabled; its save should differ, proving the test can catch stale results.");
             selfTestOrder = Config.Bind("SelfTest", "Order", "off,off,on", "Turbo state of each self-test run, in order (off vs off shows the game's own run-to-run variation).");
             verifyFastPaths = Config.Bind("SelfTest", "VerifyFastPaths", false, "Developer tool: also run the engine's own code next to each fast path and count calls where the results differ (slow).");
+            showRangeCircles = Config.Bind("SelfTest", "ShowRangeCircles", false, "Developer tool: keep every ship's range circles visible during self-test runs, as if selected (hidden circles aren't rebuilt).");
             autoRunSave = Config.Bind("SelfTest", "AutoRunSave", "",
                 "Developer tool: path of a save to self-test automatically from the main menu; the game quits when done.");
             dataDir = Config.Bind("SelfTest", "DataDir", "",
@@ -53,6 +56,7 @@ namespace ParticleFleetTurbo
             sectionMethods = Config.Bind("Profiler", "SectionMethods",
                 "GameSpace.GameUpdate, SpaceModule.GameUpdate, Module.GameUpdate, CommandModule.GameUpdate, Land.UpdateSubmeshes",
                 "Methods (Type.Method, comma-separated) whose calls SectionTiming splits; every mark adds a little time, so fine-grained lists overstate small, frequent calls.");
+            allocTracking = Config.Bind("Profiler", "AllocTracking", false, "With SectionTiming: also charge managed heap growth to the sections (read at startup).");
             timedMethods = Config.Bind("Profiler", "TimedMethods", "",
                 "Methods (Type.Method, comma-separated) to time from start to return in the profiler report (read at startup).");
             meshUpdateInterval = Config.Bind("Turbo", "MeshUpdateInterval", 6,
@@ -63,6 +67,18 @@ namespace ParticleFleetTurbo
 
         // Patching touches Assembly-CSharp; doing it from Awake loads that assembly while Unity 5.3 is
         // still registering scripts, which leaves every UI MonoBehaviour "missing" (black screen).
+        /// <summary>"Type.Method", or "Type.Method()" for the parameterless overload of an overloaded method.</summary>
+        private static System.Reflection.MethodInfo FindMethod(string name)
+        {
+            string[] parts = name.Trim().Split('.');
+            if (parts.Length != 2)
+                return null;
+            var type = AccessTools.TypeByName(parts[0]);
+            return parts[1].EndsWith("()")
+                ? AccessTools.Method(type, parts[1].Substring(0, parts[1].Length - 2), System.Type.EmptyTypes)
+                : AccessTools.Method(type, parts[1]);
+        }
+
         private void Start()
         {
             Profiler.Enabled = profilerEnabled.Value;
@@ -70,17 +86,19 @@ namespace ParticleFleetTurbo
             Turbo.Set(turboEnabled.Value);
             SelfTest.Order = selfTestOrder.Value;
             SpaceModuleTargetPatch.Verify = verifyFastPaths.Value;
+            CircleOverlapPatch.Verify = verifyFastPaths.Value;
+            SelfTest.ShowRangeCircles = showRangeCircles.Value;
             var harmony = new Harmony("petru.particlefleet.turbo");
             harmony.PatchAll(typeof(Plugin).Assembly);
             MeshUploads.Interval = System.Math.Max(1, meshUpdateInterval.Value);
             if (sectionTiming.Value)
             {
                 Sections.Enabled = true;
+                Sections.TrackAllocs = allocTracking.Value;
                 MeshUploads.Timing = true;
                 foreach (string name in sectionMethods.Value.Split(','))
                 {
-                    string[] parts = name.Trim().Split('.');
-                    var method = parts.Length == 2 ? AccessTools.Method(AccessTools.TypeByName(parts[0]), parts[1]) : null;
+                    var method = FindMethod(name);
                     if (method != null)
                         Sections.Instrument(harmony, method);
                     else
@@ -91,8 +109,7 @@ namespace ParticleFleetTurbo
             {
                 if (name.Trim() == "")
                     continue;
-                string[] parts = name.Trim().Split('.');
-                var method = parts.Length == 2 ? AccessTools.Method(AccessTools.TypeByName(parts[0]), parts[1]) : null;
+                var method = FindMethod(name);
                 if (method != null)
                     MethodTimer.Time(harmony, method);
                 else

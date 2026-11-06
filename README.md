@@ -36,10 +36,17 @@ Engine:
   they now come from a table built with the engine's own formulas (checked cell by cell against the original).
 - **Ship range circles.** Ships rebuilt their weapon range circles almost every tick in battle, though they are
   only visible on a selected or hovered ship. Hidden circles are now rebuilt when they are shown.
+  Rebuilding a visible one took about 130 ms on a big ship, twice each time it gained or lost a module; a faster
+  overlap check brings that to about 20 ms and draws the same circles.
 - **Land omni target searches.** Every omni looks for something to build, shoot or repair every tick and usually
   finds nothing. The searches for structures and mire now skip empty map blocks without a function call per
   block, and the search for land units under construction first does a quick check whether any cell in range
   could qualify. Both find exactly what the engine would.
+
+- **Tiny freezes from garbage collection.** Each tick the game threw away about 500 KB of temporary data on a map
+  with big ships: an array per hull cell to check for ship collisions, a helper object per running effect, and scan
+  buffers per ship. Cleaning that up pauses the game about 40 ms, every few seconds. These are now avoided when they
+  aren't needed or reused, with the same results, so collections are about 10 times rarer.
 
 Results:
 
@@ -53,6 +60,8 @@ Results:
   with it on (median 33.2 ms: full speed).
 - Exchange map #1276 (16 large ships with ~1,100 modules, 134 land omnis, 2,500 particles): frame time 92 ms with
   the plugin off, 55 ms with 0.4.0, 47 ms now. The rest is spread over many small costs.
+- Exchange map #1990 (near full speed but with constant tiny freezes): a 65–80 ms frame every 6.5 seconds is gone.
+  Over 60 seconds of game: 9 garbage collections → 0, average frame 35.2 ms → 33.6 ms.
 
 ## Installing
 
@@ -86,7 +95,8 @@ engine's own searches next to the fast ones on every call and reports how many r
 
 `Profiler.SectionTiming = true` (read at startup) splits the engine's own frame time by call site in the profiler
 report (`Profiler.SectionMethods` picks the methods), and `Profiler.TimedMethods` times listed methods from start
-to return, which is how the engine hot spots above were found. The profiler report also lists frames over 100 ms, and
+to return, which is how the engine hot spots above were found. `Profiler.AllocTracking = true` (with section
+timing) also shows which sections create garbage. The profiler report also lists frames over 100 ms, and
 each self-test run writes a per-frame log (`run<N>-frames.tsv`: frame time, game step time, garbage collections).
 
 ## Building
