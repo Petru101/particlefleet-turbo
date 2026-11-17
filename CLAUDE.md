@@ -134,6 +134,12 @@ cloud-synced Documents).
   timeline from High Tide's PipeWire log, `~/Projects/high-tide-test/logs/`, JOIN/LEAVE ParticleFleet.exe).
   Freezes at 18:36 that day and at 02:00 on 10-17 were a Steam client overlay bug (alt-tab wedges
   gameoverlayui; ValveSoftware/steam-for-linux#13682), not the mod. Workaround: overlay off for the game.
+  A freeze on 11-17 (game still running, every thread idle in a wait, mod's last report normal) came with
+  "wine client error:4e0: read: Bad file descriptor" in Steam's console-linux.txt at the moment it stopped: a game
+  thread lost its pipe to wineserver and died. Steam's `gameoverlayrenderer.so` is preloaded into the game even with
+  the overlay off for it (`OverlayAppEnable 0`) and exports `read` and `close`, which Wine's server reads go through
+  (seen on the main thread's stack). Likely cause, not proven; Ferret was attached too. To inspect a frozen game:
+  host-spawn `eu-stack -p <pid>` / `gdb -p` (the container can't ptrace into Steam's sandbox; the host can).
   `Process.PrivateMemorySize64` returns 0 under Wine: the profiler reports only the managed heap.
 - Hidden test copy: `/run/media/Petru/Games/pf-test/` holds reflinked copies of the game (`game/`, with
   `steam_appid.txt`), its prefix (`prefix/`) and data (`data/`, used via `DataDir`). `bin/start.sh [game dir]` (run on the
