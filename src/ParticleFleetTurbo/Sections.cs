@@ -94,16 +94,14 @@ namespace ParticleFleetTurbo
             return Labels.Count - 1;
         }
 
-        public static void Instrument(Harmony harmony, MethodBase method)
-        {
-            Owner = method.DeclaringType.Name + "." + method.Name;
+        public static void Instrument(Harmony harmony, MethodBase method) =>
             harmony.Patch(method, transpiler: new HarmonyMethod(typeof(Sections), nameof(Transpiler)));
-        }
 
-        private static string Owner;
-
-        private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        // Harmony reruns transpilers whenever the method is patched again (e.g. by MethodTimer), so the owner comes from
+        // the method being patched, not from state set by Instrument.
+        private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
+            string Owner = original.DeclaringType.Name + "." + original.Name;
             var mark = AccessTools.Method(typeof(Sections), nameof(Mark));
             var markTyped = AccessTools.Method(typeof(Sections), nameof(MarkTyped));
             Assembly game = typeof(GameSpace).Assembly, unity = typeof(UnityEngine.Object).Assembly;

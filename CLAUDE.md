@@ -21,6 +21,9 @@ Map #504 (24 ships, 108 land omnis, 5000 particles + 8200 bonds) is 51 ms with 0
 safe is left that pays: particle physics (~11 ms) is bound by scattered memory reads, not code (see Tried and dropped).
 Map #1990 (ships, otherwise near full speed) "kept doing tiny freezes": garbage collections, ~40 ms every 6 s, driven by
 533 KB of garbage per frame. Near the 33 ms budget a GC pause is a visible hitch even though the average looks fine.
+Map #1969 (a won save, kept playing, 231 land omnis: the player raised the omni limit with Ferret) is 66 ms off, ~40 ms on
+headless (48-60 ms in real play, more of it drawing). Left: omni beam restarts (~4 ms, native Play), shell spawning
+(~4 ms, Instantiate), struc building; the structure searches themselves are 0.2 ms.
 
 ## Optimizations (all behind `Turbo.Enabled`, toggled live with F10)
 - `CoresWithVarCache.cs` — caches `GetCrplCoreHoldersWithVar` per (var name, value). Invalidated per name by
@@ -57,7 +60,8 @@ Map #1990 (ships, otherwise near full speed) "kept doing tiny freezes": garbage 
   hoisting `cm.transform.position` out of `ShipPlan.UpdateHullSections` (no gain); an inline
   `Particle.InteractNearby` (same cells, skipping no-op `UpdateGrid` calls; saves identical but 0 ms gained, though
   MethodTimer showed 5.6 → 1.6 ms); skipping lathe beam Stop/Play while already playing (1.3 ms, may change the
-  look); a mask-based `GameControls.CreateCircleOfStrucs` for energy mines (0.1 ms).
+  look); a mask-based `GameControls.CreateCircleOfStrucs` for energy mines (0.1 ms); skipping `ResourceBar.SetValue`
+  calls that repeat the bar's last value/max/width (#1969, 580 calls a frame: no gain in a 2x2 DLL A/B).
 
 ## Verification
 F11 self-test (`SelfTest.cs`): snapshots the mission, replays 300 ticks with Turbo off/off/on (auto-presses the
@@ -99,6 +103,7 @@ Later runs in one session are slower (+5-6 ms by run 3, heap/GC growth), so comp
   (frame ms, previous update ms, GCs; the spike shows on the row after its GC) and times a forced GC (~40 ms at 250 MB:
 small next to a slow frame, but a visible hitch on a map near 33 ms). `[Profiler] AllocTracking` (with SectionTiming)
 charges heap growth to sections, which found #1990's garbage; the heap grows in blocks, so read totals over many frames.
+Saves made after winning load onto the results panel (paused); the self-test presses Keep Playing, like the player.
 - `tools/` — Python `.pf1` reader/writer (`pfnbt.py`) and save differ. `tools/patch1402.py` (the one-off #1402
   map patcher) is git-ignored and kept local: it quotes the map author's scripts, which aren't ours to publish.
 - `tests/` — cache-invalidation stress script and the save injector.

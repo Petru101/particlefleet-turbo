@@ -147,6 +147,10 @@ namespace ParticleFleetTurbo
                     state = State.Running;
                     break;
                 case State.Running:
+                    // A save made after winning shows the results panel (paused) again; continue the way the player did.
+                    MissionCompletePanel results = game.gameControls.missionCompletePanel;
+                    if (results != null && results.gameObject.activeSelf)
+                        results.KeepPlaying();
                     if (ShowRangeCircles)
                     {
                         foreach (CommandModule ship in game.commandModules)
