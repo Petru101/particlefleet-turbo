@@ -123,8 +123,8 @@ cloud-synced Documents).
   The default `Application` .cctor fires during Unity 5.3's `MonoManager ReloadAssembly`: plugins loading
   then either crash natively or leave all UI MonoBehaviours "missing" (black screen).
 - Even so, don't touch Assembly-CSharp types in plugin `Awake`; patch from `Start`.
-- Proton needs `winhttp` = native,builtin: set in the prefix `user.reg` `[Software\\Wine\\DllOverrides]`
-  (original backed up as `user.reg.before-bepinex`), so no Steam launch option is needed.
+- Proton needs `winhttp` = native,builtin: this machine uses the launch option (see Next / open); the prefix
+  `user.reg` override was the older route.
 - Engine changes must keep script-visible results identical (including `GetCoresWithVar` result order) so maps
   behave the same.
 - Memory (32-bit, 4 GiB): on #1402 the game settles at ~3.1 GiB mapped / ~2.2 GiB writable (measured
@@ -140,9 +140,10 @@ cloud-synced Documents).
   the overlay off for it (`OverlayAppEnable 0`) and exports `read` and `close`, which Wine's server reads go through
   (seen on the main thread's stack). Likely cause, not proven; Ferret was attached too. To inspect a frozen game:
   host-spawn `eu-stack -p <pid>` / `gdb -p` (the container can't ptrace into Steam's sandbox; the host can).
-  The Steam overlay is now off globally (`"EnableGameOverlay" "0"` in localconfig.vdf's `"system"` block, backup
-  `localconfig.vdf.before-overlay-off`; Steam kept it after a restart). Not yet checked: whether Steam still preloads
-  `gameoverlayrenderer.so` into games with it off (grep `/proc/<pid>/maps`); if so, `LD_PRELOAD=""` in the launch option.
+  The Steam overlay is off globally (`"EnableGameOverlay" "0"` in localconfig.vdf's `"system"` block, backup
+  `localconfig.vdf.before-overlay-off`), but Steam preloads `gameoverlayrenderer.so` into games even so. The game's
+  launch option is `LD_PRELOAD="" WINEDLLOVERRIDES="winhttp=n,b" %command%` (backup `localconfig.vdf.before-ldpreload`):
+  checked on a Steam launch, 0 overlay mappings in `/proc/<pid>/maps`, the mod loads. The overlay was the only preload.
   `Process.PrivateMemorySize64` returns 0 under Wine: the profiler reports only the managed heap.
 - Hidden test copy: `/run/media/Petru/Games/pf-test/` holds reflinked copies of the game (`game/`, with
   `steam_appid.txt`), its prefix (`prefix/`) and data (`data/`, used via `DataDir`). `bin/start.sh [game dir]` (run on the
