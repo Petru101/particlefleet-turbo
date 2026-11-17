@@ -140,6 +140,9 @@ cloud-synced Documents).
   the overlay off for it (`OverlayAppEnable 0`) and exports `read` and `close`, which Wine's server reads go through
   (seen on the main thread's stack). Likely cause, not proven; Ferret was attached too. To inspect a frozen game:
   host-spawn `eu-stack -p <pid>` / `gdb -p` (the container can't ptrace into Steam's sandbox; the host can).
+  The Steam overlay is now off globally (`"EnableGameOverlay" "0"` in localconfig.vdf's `"system"` block, backup
+  `localconfig.vdf.before-overlay-off`; Steam kept it after a restart). Not yet checked: whether Steam still preloads
+  `gameoverlayrenderer.so` into games with it off (grep `/proc/<pid>/maps`); if so, `LD_PRELOAD=""` in the launch option.
   `Process.PrivateMemorySize64` returns 0 under Wine: the profiler reports only the managed heap.
 - Hidden test copy: `/run/media/Petru/Games/pf-test/` holds reflinked copies of the game (`game/`, with
   `steam_appid.txt`), its prefix (`prefix/`) and data (`data/`, used via `DataDir`). `bin/start.sh [game dir]` (run on the
