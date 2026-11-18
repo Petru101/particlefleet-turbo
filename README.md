@@ -48,6 +48,16 @@ Engine:
   buffers per ship. Cleaning that up pauses the game about 40 ms, every few seconds. These are now avoided when they
   aren't needed or reused, with the same results, so collections are about 10 times rarer.
 
+- **Freezes when ships spawn.** Every new ship got its hull shading painted pixel by pixel, which took
+  100-500 ms for big custom ships: a freeze every time a spawner built one. Ships with the same hull now share one
+  copy (pixel-identical), and the hulls a map's spawners will build are painted while the mission loads. The game
+  also never freed these, so each spawn used to leave about 10 MB behind.
+
+Optional:
+
+- **Skip dialogue.** `Gameplay.SkipDialogue = true` closes map dialogue boxes as soon as they open, as if you pressed
+  their Skip button, so the game doesn't pause for them. Fading one-line messages still show. Off by default.
+
 Results:
 
 - Exchange map #1402 (about 170 networked script units): frame time 52–55 ms → 34 ms (the game caps at 33.3 ms),
@@ -62,6 +72,8 @@ Results:
   the plugin off, 55 ms with 0.4.0, 47 ms now. The rest is spread over many small costs.
 - Exchange map #1990 (near full speed but with constant tiny freezes): a 65–80 ms frame every 6.5 seconds is gone.
   Over 60 seconds of game: 9 garbage collections → 0, average frame 35.2 ms → 33.6 ms.
+- Exchange map #743 (8 ship spawners building big custom ships): freezes of 150-680 ms several times every 10 seconds
+  are gone; over 30 seconds of game, frames over 50 ms 26 → 2.
 
 ## Installing
 

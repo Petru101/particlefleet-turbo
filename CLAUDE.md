@@ -66,7 +66,7 @@ Update/LateUpdate scripts total only ~3 ms).
   for effects with no child transforms (Unity's `Simulate` allocates a closure and enumerator; ~45 KB); `ShipPlan.ScanHull`
   reuses its grid, list and queue (~42 KB; its one caller drops them before the next scan). #1990: 533 → 48 KB/frame;
   60 s of game: 9 GCs → 0, frames over 50 ms 12 → 0, mean 35.2 → 33.6 ms (update 26 → 22.4), off = on saves.
-- `Dialogue.cs` — `[Gameplay] SkipDialogue` (default off, also off in the user's config): a postfix on
+- `Dialogue.cs` — `[Gameplay] SkipDialogue` (default off for everyone; on in the user's own config, by choice): a postfix on
   `ConversationsManager.ShowConversation` calls `ConversationPanel.Finish` (what the box's Skip button does) right after
   it opens, so the game unpauses and queued dialogue follows. Fading one-line (singleMode) messages and the editor are
   left alone. Tested on #743 save-1 with UpdateCount set to 0 (MISSION_START shows on the first update): skipped.
@@ -190,7 +190,8 @@ cloud-synced Documents).
 - License: MIT (chosen so map makers and other modders can reuse the code freely).
 - Published: GitHub Petru101/particlefleet-turbo, releases v0.1.0 (scripts), v0.2.0 (engine fast paths), v0.3.0
   (omni searches, plasma uploads), v0.4.0 (staggered mesh redraws), v0.5.0
-  (attraction field table, deferred range circles) and v0.6.0 (less garbage, faster visible range circles; each release zip
+  (attraction field table, deferred range circles), v0.6.0 (less garbage, faster visible range circles) and v0.7.0
+  (shared hull textures, skip-dialogue setting; each release zip
   was tested on a fresh hidden game copy: loads, 0 missing scripts, self-test off = on), and a Steam discussions post
   (by the user). Knuckle Cracker forum: the user has an account; post in "Map Makers, Ship Builders, and
   Coders" (draft in drafts/, git-ignored).
