@@ -63,6 +63,11 @@ pixel (`ShipPlan.GetBaseHeightTexture`, 100-500 ms for its big custom hulls). Se
   for effects with no child transforms (Unity's `Simulate` allocates a closure and enumerator; ~45 KB); `ShipPlan.ScanHull`
   reuses its grid, list and queue (~42 KB; its one caller drops them before the next scan). #1990: 533 → 48 KB/frame;
   60 s of game: 9 GCs → 0, frames over 50 ms 12 → 0, mean 35.2 → 33.6 ms (update 26 → 22.4), off = on saves.
+- `Dialogue.cs` — `[Gameplay] SkipDialogue` (default off; on in the user's config): a postfix on
+  `ConversationsManager.ShowConversation` calls `ConversationPanel.Finish` (what the box's Skip button does) right after
+  it opens, so the game unpauses and queued dialogue follows. Fading one-line (singleMode) messages and the editor are
+  left alone. Tested on #743 save-1 with UpdateCount set to 0 (MISSION_START shows on the first update): skipped.
+  Not usable as a control: the self-test unpauses the game itself when a run starts.
 - Tried and dropped (each A/B-tested by swapping DLLs, Turbo on, same run position):
   hoisting `cm.transform.position` out of `ShipPlan.UpdateHullSections` (no gain); an inline
   `Particle.InteractNearby` (same cells, skipping no-op `UpdateGrid` calls; saves identical but 0 ms gained, though

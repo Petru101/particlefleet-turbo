@@ -25,6 +25,7 @@ namespace ParticleFleetTurbo
         private ConfigEntry<bool> selfTestBrokenCacheRun;
         private ConfigEntry<string> selfTestOrder;
         private ConfigEntry<bool> verifyFastPaths;
+        private ConfigEntry<bool> skipDialogue;
         internal static BepInEx.Logging.ManualLogSource Log;
         private ConfigEntry<bool> showRangeCircles;
         private ConfigEntry<string> autoRunSave;
@@ -62,6 +63,8 @@ namespace ParticleFleetTurbo
             allocTracking = Config.Bind("Profiler", "AllocTracking", false, "With SectionTiming: also charge managed heap growth to the sections (read at startup).");
             timedMethods = Config.Bind("Profiler", "TimedMethods", "",
                 "Methods (Type.Method, comma-separated) to time from start to return in the profiler report (read at startup).");
+            skipDialogue = Config.Bind("Gameplay", "SkipDialogue", false,
+                "Close map dialogue boxes as soon as they open, as if you pressed their Skip button. Fading one-line messages still show.");
             meshUpdateInterval = Config.Bind("Turbo", "MeshUpdateInterval", 6,
                 "Redraw a changed land or plasma chunk only every this many frames, chunks taking turns (1 = every frame, like the game). Saves a lot on maps with spreading mire; only the picture can lag, by up to this many frames minus one.");
             overlayKey = Config.Bind("Profiler", "OverlayKey", new KeyboardShortcut(KeyCode.F9), "Toggle the on-screen profiler overlay.");
@@ -93,6 +96,7 @@ namespace ParticleFleetTurbo
             CircleOverlapPatch.Verify = verifyFastPaths.Value;
             HullTextureCachePatch.Verify = verifyFastPaths.Value;
             SelfTest.ShowRangeCircles = showRangeCircles.Value;
+            SkipDialoguePatch.Enabled = skipDialogue.Value;
             var harmony = new Harmony("petru.particlefleet.turbo");
             harmony.PatchAll(typeof(Plugin).Assembly);
             MeshUploads.Interval = System.Math.Max(1, meshUpdateInterval.Value);
