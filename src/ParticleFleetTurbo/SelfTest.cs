@@ -168,7 +168,8 @@ namespace ParticleFleetTurbo
                                      $", block searches {BlockSearchPatches.Calls} calls, {BlockSearchPatches.Mismatches} mismatches" +
                                      $", lathe land unit skips {LatheLandUnitPatch.Skipped}, {LatheLandUnitPatch.Mismatches} mismatches" +
                                      $", attraction fields {AttractionFieldPatch.Calls} calls, {AttractionFieldPatch.Mismatches} mismatches" +
-                                     $", circle overlaps {CircleOverlapPatch.Calls} calls, {CircleOverlapPatch.Mismatches} mismatches" : "");
+                                     $", circle overlaps {CircleOverlapPatch.Calls} calls, {CircleOverlapPatch.Mismatches} mismatches" +
+                                     $", hull textures {HullTextureCachePatch.Hits} reused, {HullTextureCachePatch.Misses} painted, {HullTextureCachePatch.Mismatches} mismatches" : "");
                     File.WriteAllText(Path.Combine(dir, $"run{runIndex}-frames.tsv"), Profiler.FrameLog.ToString());
                     Profiler.FrameLog = null;
                     var gcWatch = System.Diagnostics.Stopwatch.StartNew();

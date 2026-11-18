@@ -292,4 +292,130 @@ namespace ParticleFleetTurbo
             return false;
         }
     }
+
+    /// <summary>
+    /// Every new ship gets a bump texture painted pixel by pixel from its hull plan (ShipPlan.GetBaseHeightTexture:
+    /// edge distances, height map, normal map, then a large upload). That took 100-500 ms per spawn on map #743,
+    /// whose spawners build the same few ships over and over: a freeze each time. The texture depends only on the
+    /// hull plan and nothing changes or destroys it later (the engine never frees them: each spawn left ~10 MB behind),
+    /// so ships with the same plan (compared cell by cell) share one. Hulls the map's spawners will build are painted
+    /// when the mission loads.
+    /// </summary>
+    [HarmonyPatch(typeof(ShipPlan), nameof(ShipPlan.GetBaseHeightTexture))]
+    internal static class HullTextureCachePatch
+    {
+        public static bool Verify;
+        public static long Hits, Misses, Mismatches;
+
+        private const int MaxEntries = 64;
+
+        private class Entry
+        {
+            public int[,] Plan;
+            public Texture2D Texture;
+        }
+
+        private static readonly List<Entry> Entries = new List<Entry>();
+
+        [HarmonyReversePatch]
+        [HarmonyPatch(typeof(ShipPlan), nameof(ShipPlan.GetBaseHeightTexture))]
+        private static Texture2D Original(ShipPlan instance) => throw new System.NotImplementedException();
+
+        private static GameSpace prewarmedFor;
+
+        /// <summary>
+        /// Once per loaded mission (first GameSpace.Update), paints the hulls the map's ship spawners will build, the
+        /// way ShipSpawner.CreateShip picks them, so their first spawn doesn't freeze either. Random picks are skipped.
+        /// </summary>
+        public static void PrewarmSpawners(GameSpace game, BepInEx.Logging.ManualLogSource log)
+        {
+            if (game == prewarmedFor || !Turbo.Enabled)
+                return;
+            prewarmedFor = game;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            int painted = 0;
+            foreach (ShipSpawner spawner in Object.FindObjectsOfType<ShipSpawner>())
+            {
+                if (spawner == null || spawner.shipType == null)
+                    continue;
+                string type = spawner.shipType.ToUpper();
+                int[,] plan;
+                if (type == "CUSTOM")
+                    plan = spawner.bsd?.hullPlan;
+                else if (type == "MIRROR" || type == "RANDOM" || type == "RAND_MED" || type == "RAND_SMALL")
+                    continue;
+                else
+                    ShipBrowserPanel.GetShipData(spawner.shipType, out plan, out _, out _);
+                if (plan == null || plan.Length == 0 || Find(plan) != null)
+                    continue;
+                new ShipPlan(plan, 0, 0).GetBaseHeightTexture();
+                painted++;
+            }
+            if (painted > 0)
+                log.LogInfo($"Painted {painted} spawner hull textures in {watch.ElapsedMilliseconds} ms");
+        }
+
+        private static bool SamePlan(int[,] a, int[,] b)
+        {
+            if (a.GetLength(0) != b.GetLength(0) || a.GetLength(1) != b.GetLength(1))
+                return false;
+            int w = a.GetLength(0), h = a.GetLength(1);
+            for (int x = 0; x < w; x++)
+                for (int y = 0; y < h; y++)
+                    if (a[x, y] != b[x, y])
+                        return false;
+            return true;
+        }
+
+        private static Entry Find(int[,] plan)
+        {
+            for (int i = 0; i < Entries.Count; i++)
+            {
+                Entry entry = Entries[i];
+                if (!SamePlan(entry.Plan, plan))
+                    continue;
+                if (entry.Texture == null)
+                {
+                    // Destroyed (e.g. unloaded with a scene): paint it again.
+                    Entries.RemoveAt(i);
+                    return null;
+                }
+                return entry;
+            }
+            return null;
+        }
+
+        private static bool Prefix(ShipPlan __instance, ref Texture2D __result)
+        {
+            if (!Turbo.Enabled)
+                return true;
+            int[,] plan = __instance.hullPlan;
+            if (plan == null)
+                return true;
+            Entry entry = Find(plan);
+            if (entry != null)
+            {
+                Hits++;
+                __result = entry.Texture;
+                if (Verify)
+                {
+                    Texture2D fresh = Original(__instance);
+                    Color32[] a = fresh.GetPixels32(), b = __result.GetPixels32();
+                    bool same = a.Length == b.Length && fresh.width == __result.width && fresh.height == __result.height;
+                    for (int k = 0; same && k < a.Length; k++)
+                        same = a[k].r == b[k].r && a[k].g == b[k].g && a[k].b == b[k].b && a[k].a == b[k].a;
+                    if (!same)
+                        Mismatches++;
+                    Object.Destroy(fresh);
+                }
+                return false;
+            }
+            Misses++;
+            __result = Original(__instance);
+            if (Entries.Count >= MaxEntries)
+                Entries.RemoveAt(0);
+            Entries.Add(new Entry { Plan = (int[,])plan.Clone(), Texture = __result });
+            return false;
+        }
+    }
 }

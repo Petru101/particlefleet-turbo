@@ -27,6 +27,10 @@ namespace ParticleFleetTurbo
         private static long[] calls = new long[256];
         private static long[] bytes = new long[256];
         private static long lastHeap;
+        private static long[] frameStart = new long[256];
+        private static long beginTicks;
+        private static readonly List<string> SlowFrames = new List<string>();
+        public static double SlowFrameMs = 80;
         private static int current = -1;
         private static long last;
 
@@ -36,7 +40,24 @@ namespace ParticleFleetTurbo
                 return;
             ChargeAllocs(1);
             current = 0;
-            last = Stopwatch.GetTimestamp();
+            if (frameStart.Length < ticks.Length)
+                frameStart = new long[ticks.Length];
+            Array.Copy(ticks, frameStart, ticks.Length);
+            last = beginTicks = Stopwatch.GetTimestamp();
+        }
+
+        /// <summary>For a frame whose update took over <see cref="SlowFrameMs"/>, keeps the sections that took its time.</summary>
+        private static void RecordSlowFrame(long now)
+        {
+            double msPerTick = 1000.0 / Stopwatch.Frequency;
+            double total = (now - beginTicks) * msPerTick;
+            if (total < SlowFrameMs || SlowFrames.Count >= 20)
+                return;
+            var sb = new StringBuilder();
+            sb.AppendFormat("  {0,6:F0} ms:", total);
+            foreach (int i in Enumerable.Range(0, Labels.Count).Where(i => ticks[i] - frameStart[i] > 0).OrderByDescending(i => ticks[i] - frameStart[i]).Take(4))
+                sb.AppendFormat(" {0:F0} {1};", (ticks[i] - frameStart[i]) * msPerTick, Labels[i]);
+            SlowFrames.Add(sb.ToString());
         }
 
         private static void ChargeAllocs(int section)
@@ -53,9 +74,11 @@ namespace ParticleFleetTurbo
         {
             if (!Enabled || current < 0)
                 return;
-            ticks[current] += Stopwatch.GetTimestamp() - last;
+            long now = Stopwatch.GetTimestamp();
+            ticks[current] += now - last;
             ChargeAllocs(current);
             current = -1;
+            RecordSlowFrame(now);
         }
 
         public static void Mark(int id)
@@ -135,6 +158,12 @@ namespace ParticleFleetTurbo
             double msPerTick = 1000.0 / Stopwatch.Frequency;
             foreach (int i in Enumerable.Range(0, Labels.Count).Where(i => ticks[i] > 0).OrderByDescending(i => ticks[i]).Take(top))
                 sb.AppendFormat("  {0,8:F3}  {1,8:F0}  {2}\n", ticks[i] * msPerTick / frames, calls[i] / (double)frames, Labels[i]);
+            if (SlowFrames.Count > 0)
+            {
+                sb.AppendFormat("Slow updates (> {0:F0} ms), sections that took the time:\n", SlowFrameMs);
+                foreach (string line in SlowFrames)
+                    sb.Append(line).Append('\n');
+            }
             if (TrackAllocs)
             {
                 sb.AppendFormat("Managed allocations (KB/frame), total {0:F1}:\n", bytes.Sum() / 1024.0 / frames);
@@ -148,6 +177,7 @@ namespace ParticleFleetTurbo
         {
             Array.Clear(ticks, 0, ticks.Length);
             Array.Clear(calls, 0, calls.Length);
+            SlowFrames.Clear();
             Array.Clear(bytes, 0, bytes.Length);
         }
     }

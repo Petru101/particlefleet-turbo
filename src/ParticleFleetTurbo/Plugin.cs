@@ -16,6 +16,7 @@ namespace ParticleFleetTurbo
         private ConfigEntry<bool> statementTiming;
         private ConfigEntry<bool> sectionTiming;
         private ConfigEntry<bool> allocTracking;
+        private ConfigEntry<float> slowUpdateMs;
         private ConfigEntry<string> sectionMethods;
         private ConfigEntry<string> timedMethods;
         private ConfigEntry<int> meshUpdateInterval;
@@ -24,6 +25,7 @@ namespace ParticleFleetTurbo
         private ConfigEntry<bool> selfTestBrokenCacheRun;
         private ConfigEntry<string> selfTestOrder;
         private ConfigEntry<bool> verifyFastPaths;
+        internal static BepInEx.Logging.ManualLogSource Log;
         private ConfigEntry<bool> showRangeCircles;
         private ConfigEntry<string> autoRunSave;
         private ConfigEntry<string> dataDir;
@@ -56,6 +58,7 @@ namespace ParticleFleetTurbo
             sectionMethods = Config.Bind("Profiler", "SectionMethods",
                 "GameSpace.GameUpdate, SpaceModule.GameUpdate, Module.GameUpdate, CommandModule.GameUpdate, Land.UpdateSubmeshes",
                 "Methods (Type.Method, comma-separated) whose calls SectionTiming splits; every mark adds a little time, so fine-grained lists overstate small, frequent calls.");
+            slowUpdateMs = Config.Bind("Profiler", "SlowUpdateMs", 80f, "With SectionTiming: list the sections behind each game update slower than this (read at startup).");
             allocTracking = Config.Bind("Profiler", "AllocTracking", false, "With SectionTiming: also charge managed heap growth to the sections (read at startup).");
             timedMethods = Config.Bind("Profiler", "TimedMethods", "",
                 "Methods (Type.Method, comma-separated) to time from start to return in the profiler report (read at startup).");
@@ -81,12 +84,14 @@ namespace ParticleFleetTurbo
 
         private void Start()
         {
+            Log = Logger;
             Profiler.Enabled = profilerEnabled.Value;
             Profiler.StatementTiming = statementTiming.Value;
             Turbo.Set(turboEnabled.Value);
             SelfTest.Order = selfTestOrder.Value;
             SpaceModuleTargetPatch.Verify = verifyFastPaths.Value;
             CircleOverlapPatch.Verify = verifyFastPaths.Value;
+            HullTextureCachePatch.Verify = verifyFastPaths.Value;
             SelfTest.ShowRangeCircles = showRangeCircles.Value;
             var harmony = new Harmony("petru.particlefleet.turbo");
             harmony.PatchAll(typeof(Plugin).Assembly);
@@ -95,6 +100,7 @@ namespace ParticleFleetTurbo
             {
                 Sections.Enabled = true;
                 Sections.TrackAllocs = allocTracking.Value;
+                Sections.SlowFrameMs = slowUpdateMs.Value;
                 MeshUploads.Timing = true;
                 foreach (string name in sectionMethods.Value.Split(','))
                 {
@@ -199,6 +205,7 @@ namespace ParticleFleetTurbo
             Sections.End();
             Profiler.UpdateEnd(Time.unscaledDeltaTime);
             SelfTest.AfterGameUpdate(__instance);
+            HullTextureCachePatch.PrewarmSpawners(__instance, Plugin.Log);
         }
 
         private static void Finalizer() => MeshUploads.InFrameRefresh = false;

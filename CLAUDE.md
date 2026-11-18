@@ -24,6 +24,8 @@ Map #1990 (ships, otherwise near full speed) "kept doing tiny freezes": garbage 
 Map #1969 (a won save, kept playing, 231 land omnis: the player raised the omni limit with Ferret) is 66 ms off, ~40 ms on
 headless (48-60 ms in real play, more of it drawing). Left: omni beam restarts (~4 ms, native Play), shell spawning
 (~4 ms, Instantiate), struc building; the structure searches themselves are 0.2 ms.
+Map #743 froze 150-680 ms several times every 10 s: each ship spawner spawn painted the new ship's bump texture pixel by
+pixel (`ShipPlan.GetBaseHeightTexture`, 100-500 ms for its big custom hulls). See `ShipFastPaths.cs` below.
 
 ## Optimizations (all behind `Turbo.Enabled`, toggled live with F10)
 - `CoresWithVarCache.cs` — caches `GetCrplCoreHoldersWithVar` per (var name, value). Invalidated per name by
@@ -50,6 +52,11 @@ headless (48-60 ms in real play, more of it drawing). Left: omni beam restarts (
   ~180 circles, seen as 130-230 ms frames in real play on #1990 but never in plain headless runs; `CombinedCircles.IsWithinRadius`
   now uses per-type arrays, last-hit circle first: ~20 ms per rebuild, 1.7M checks 0 mismatches.
   `[SelfTest] ShowRangeCircles` keeps all ships' circles visible during runs, to test this headless.
+  `ShipPlan.GetBaseHeightTexture` depends only on the hull plan, and nothing writes to or destroys the texture (the
+  engine never frees them; one per spawn), so ships with the same plan (compared cell by cell) share one Texture2D,
+  repainted if Unity destroyed it; the hulls of the map's non-random spawners are painted on the mission's first
+  update (~0.3-1 s). #743, 900 ticks: stalls over 50 ms 26 → 2, mean 39.2 → 33.6 ms, off = on saves, 8 shared
+  textures pixel-identical to fresh paints (VerifyFastPaths).
 - `GarbageFastPaths.cs` — removes per-tick garbage, keeping results the same: `VirtualParticle.SetPosition` copies its
   cell's list once per hull cell to look for enemy hull (~410 KB/frame), now only when an entry can collide
   (transpiler, empty array otherwise); `ParticleSystemManager.GameUpdate` calls native `Internal_Simulate` directly
@@ -103,6 +110,8 @@ Later runs in one session are slower (+5-6 ms by run 3, heap/GC growth), so comp
   (frame ms, previous update ms, GCs; the spike shows on the row after its GC) and times a forced GC (~40 ms at 250 MB:
 small next to a slow frame, but a visible hitch on a map near 33 ms). `[Profiler] AllocTracking` (with SectionTiming)
 charges heap growth to sections, which found #1990's garbage; the heap grows in blocks, so read totals over many frames.
+The section report also lists, for each game update over `[Profiler] SlowUpdateMs` (default 80), the sections that took
+its time: that is how #743's spawn freezes were found.
 Saves made after winning load onto the results panel (paused); the self-test presses Keep Playing, like the player.
 - `tools/` — Python `.pf1` reader/writer (`pfnbt.py`) and save differ. `tools/patch1402.py` (the one-off #1402
   map patcher) is git-ignored and kept local: it quotes the map author's scripts, which aren't ours to publish.
