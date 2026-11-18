@@ -66,7 +66,7 @@ Update/LateUpdate scripts total only ~3 ms).
   for effects with no child transforms (Unity's `Simulate` allocates a closure and enumerator; ~45 KB); `ShipPlan.ScanHull`
   reuses its grid, list and queue (~42 KB; its one caller drops them before the next scan). #1990: 533 → 48 KB/frame;
   60 s of game: 9 GCs → 0, frames over 50 ms 12 → 0, mean 35.2 → 33.6 ms (update 26 → 22.4), off = on saves.
-- `Dialogue.cs` — `[Gameplay] SkipDialogue` (default off; on in the user's config): a postfix on
+- `Dialogue.cs` — `[Gameplay] SkipDialogue` (default off, also off in the user's config): a postfix on
   `ConversationsManager.ShowConversation` calls `ConversationPanel.Finish` (what the box's Skip button does) right after
   it opens, so the game unpauses and queued dialogue follows. Fading one-line (singleMode) messages and the editor are
   left alone. Tested on #743 save-1 with UpdateCount set to 0 (MISSION_START shows on the first update): skipped.
