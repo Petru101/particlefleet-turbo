@@ -71,6 +71,8 @@ Update/LateUpdate scripts total only ~3 ms).
   it opens, so the game unpauses and queued dialogue follows. Fading one-line (singleMode) messages and the editor are
   left alone. Tested on #743 save-1 with UpdateCount set to 0 (MISSION_START shows on the first update): skipped.
   Not usable as a control: the self-test unpauses the game itself when a run starts.
+  Mission end doesn't depend on dialogue: with MISSION_END on, the results panel waits only until no dialogue shows
+  (`deferredCompletePanel`); pickups' dialogues (`conversationAtPickup`) are shown after the item already counts.
 - Tried and dropped (each A/B-tested by swapping DLLs, Turbo on, same run position):
   hoisting `cm.transform.position` out of `ShipPlan.UpdateHullSections` (no gain); an inline
   `Particle.InteractNearby` (same cells, skipping no-op `UpdateGrid` calls; saves identical but 0 ms gained, though
