@@ -26,6 +26,9 @@ headless (48-60 ms in real play, more of it drawing). Left: omni beam restarts (
 (~4 ms, Instantiate), struc building; the structure searches themselves are 0.2 ms.
 Map #743 froze 150-680 ms several times every 10 s: each ship spawner spawn painted the new ship's bump texture pixel by
 pixel (`ShipPlan.GetBaseHeightTexture`, 100-500 ms for its big custom hulls). See `ShipFastPaths.cs` below.
+Map #343 (79 ships, ~1100 modules, 2500 particles) is 94 ms off, 58-65 ms on, spread out: particles ~8 ms, module
+placement ~3, energy mines 3.3 (pack path search 1.4), omnis 3, hulls 2.6; ~16 ms per frame is Unity drawing (MonoBehaviour
+Update/LateUpdate scripts total only ~3 ms).
 
 ## Optimizations (all behind `Turbo.Enabled`, toggled live with F10)
 - `CoresWithVarCache.cs` — caches `GetCrplCoreHoldersWithVar` per (var name, value). Invalidated per name by
